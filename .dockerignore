@@ -1,0 +1,10 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+dashboard/node_modules
+dashboard/.next
+ml-models/data
+.DS_Store

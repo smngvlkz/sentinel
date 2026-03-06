@@ -1,13 +1,19 @@
-"""Simulate network attacks for testing the detection engine.
+"""
+Attack traffic simulator for testing.
 
-Run this INSTEAD of real packet capture to test the pipeline without sudo.
-Pushes synthetic attack patterns directly into the Redis stream.
+Generates synthetic network packets and pushes them into the Redis
+stream. Use this to verify the detection pipeline without needing
+root access for real packet capture.
+
+Usage:
+    python scripts/simulate_attack.py
 """
 
+import os
 import time
 import random
+
 import redis
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,9 +25,10 @@ r = redis.Redis(
 )
 
 STREAM = "packet_stream"
+MAXLEN = 100_000
 
 
-def normal_traffic():
+def normal_packet():
     return {
         "timestamp": str(time.time()),
         "src_ip": f"192.168.1.{random.randint(2, 50)}",
@@ -35,8 +42,7 @@ def normal_traffic():
     }
 
 
-def syn_flood():
-    """Lots of SYN packets from one IP, high rate."""
+def syn_flood_packet():
     return {
         "timestamp": str(time.time()),
         "src_ip": "10.99.99.99",
@@ -50,8 +56,7 @@ def syn_flood():
     }
 
 
-def port_scan():
-    """Sequential port scanning from one IP."""
+def port_scan_packet():
     return {
         "timestamp": str(time.time()),
         "src_ip": "10.88.88.88",
@@ -65,35 +70,27 @@ def port_scan():
     }
 
 
-def run_simulation():
-    print("Starting attack simulation...")
-    print("Sending normal traffic with periodic attacks")
-    print("Press Ctrl+C to stop\n")
-
+def main():
+    print("Injecting simulated traffic (Ctrl+C to stop)")
     count = 0
+
     while True:
-        # Normal traffic baseline
         for _ in range(10):
-            r.xadd(STREAM, normal_traffic(), maxlen=100_000)
+            r.xadd(STREAM, normal_packet(), maxlen=MAXLEN)
             count += 1
 
-        # Every ~5 seconds, inject an attack pattern
         if count % 100 < 30:
-            # SYN flood burst
             for _ in range(50):
-                r.xadd(STREAM, syn_flood(), maxlen=100_000)
+                r.xadd(STREAM, syn_flood_packet(), maxlen=MAXLEN)
                 count += 1
-            print(f"[{count}] Injected SYN flood burst")
 
         if count % 200 < 10:
-            # Port scan
             for _ in range(25):
-                r.xadd(STREAM, port_scan(), maxlen=100_000)
+                r.xadd(STREAM, port_scan_packet(), maxlen=MAXLEN)
                 count += 1
-            print(f"[{count}] Injected port scan")
 
         time.sleep(0.1)
 
 
 if __name__ == "__main__":
-    run_simulation()
+    main()

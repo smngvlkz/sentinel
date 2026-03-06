@@ -1,14 +1,20 @@
-"""Feature extraction from raw packet data into ML-ready features."""
+"""
+Flow-based feature extraction.
+
+Tracks bidirectional network flows and computes statistical features
+used by both the rule engine and the anomaly detection model.
+"""
+
+from __future__ import annotations
 
 import time
 from collections import defaultdict
 
 
 class FlowTracker:
-    """Tracks network flows and extracts statistical features."""
 
-    def __init__(self, flow_timeout=30.0):
-        self.flows = defaultdict(lambda: {
+    def __init__(self, flow_timeout: float = 30.0) -> None:
+        self.flows: dict[tuple[str, str], dict] = defaultdict(lambda: {
             "start_time": 0.0,
             "last_seen": 0.0,
             "packet_count": 0,
@@ -17,13 +23,12 @@ class FlowTracker:
             "flag_counts": defaultdict(int),
         })
         self.flow_timeout = flow_timeout
-        self.ip_connection_counts = defaultdict(int)
+        self.ip_connection_counts: dict[str, int] = defaultdict(int)
 
-    def _flow_key(self, packet):
+    def _flow_key(self, packet: dict[str, str]) -> tuple[str, str]:
         return (packet["src_ip"], packet["dst_ip"])
 
-    def update(self, packet):
-        """Update flow state with a new packet and return extracted features."""
+    def update(self, packet: dict[str, str]) -> dict[str, float]:
         key = self._flow_key(packet)
         now = float(packet["timestamp"])
 
@@ -42,7 +47,7 @@ class FlowTracker:
 
         duration = max(now - flow["start_time"], 0.001)
 
-        features = {
+        return {
             "packet_rate": flow["packet_count"] / duration,
             "byte_rate": flow["total_bytes"] / duration,
             "avg_packet_size": flow["total_bytes"] / flow["packet_count"],
@@ -56,14 +61,10 @@ class FlowTracker:
             "syn_ratio": flow["flag_counts"].get("S", 0) / flow["packet_count"],
         }
 
-        return features
-
-    def cleanup_stale(self, now=None):
-        """Remove flows that have been idle beyond the timeout."""
+    def cleanup_stale(self, now: float | None = None) -> int:
         now = now or time.time()
         stale = [k for k, v in self.flows.items() if now - v["last_seen"] > self.flow_timeout]
         for k in stale:
-            src_ip = k[0]
-            self.ip_connection_counts[src_ip] = max(0, self.ip_connection_counts[src_ip] - 1)
+            self.ip_connection_counts[k[0]] = max(0, self.ip_connection_counts[k[0]] - 1)
             del self.flows[k]
         return len(stale)

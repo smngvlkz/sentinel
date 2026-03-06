@@ -1,12 +1,12 @@
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y libpcap-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends libpcap-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY capture-service/ ./capture-service/
-COPY .env* ./
+COPY capture_service/ ./capture_service/
 
-CMD ["python", "capture-service/capture.py"]
+CMD ["python", "capture_service/capture.py"]

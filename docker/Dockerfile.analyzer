@@ -4,10 +4,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY analysis-service/ ./analysis-service/
-COPY detection-engine/ ./detection-engine/
-COPY alert-service/ ./alert-service/
+COPY analysis_service/ ./analysis_service/
+COPY detection_engine/ ./detection_engine/
+COPY alert_service/ ./alert_service/
 COPY ml-models/saved/ ./ml-models/saved/
-COPY .env* ./
 
-CMD ["python", "analysis-service/analyzer.py"]
+CMD ["python", "analysis_service/analyzer.py"]

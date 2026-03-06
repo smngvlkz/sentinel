@@ -1,30 +1,42 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "=== SentinelAI IDS ==="
+cd "$(dirname "$0")/.."
+
+echo "SentinelAI — Network Intrusion Detection System"
+echo "================================================"
+echo ""
+
+# Check dependencies
+command -v docker >/dev/null 2>&1 || { echo "Error: docker is not installed."; exit 1; }
+docker info >/dev/null 2>&1 || { echo "Error: Docker daemon is not running."; exit 1; }
+
+# Create .env if missing
+if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "Created .env from .env.example"
+fi
+
+# Start infrastructure
 echo "Starting infrastructure..."
-
-cd "$(dirname "$0")/../docker"
-
-# Start Redis + Postgres
-docker compose up -d redis postgres
-
-echo "Waiting for services to be ready..."
-sleep 3
-
-# Initialize database
-docker compose exec postgres psql -U sentinel -d sentinel_ai -f /docker-entrypoint-initdb.d/schema.sql 2>/dev/null || true
-
-echo "Starting capture service (requires sudo for packet sniffing)..."
-echo "Starting analyzer..."
-echo "Starting dashboard API..."
-
-docker compose up -d
+cd docker
+docker compose up -d --build
+cd ..
 
 echo ""
-echo "=== All services running ==="
-echo "Dashboard API: http://localhost:8000"
-echo "API Docs:      http://localhost:8000/docs"
+echo "Services:"
+echo "  Dashboard    http://localhost:3001"
+echo "  API          http://localhost:8000"
+echo "  API Docs     http://localhost:8000/docs"
 echo ""
-echo "View logs:     docker compose -f docker/docker-compose.yml logs -f"
-echo "Stop:          docker compose -f docker/docker-compose.yml down"
+echo "Packet capture requires root access."
+echo "Start it separately:"
+echo ""
+echo "  sudo python3 capture_service/capture.py"
+echo ""
+echo "Or with a virtual environment:"
+echo ""
+echo "  sudo .venv/bin/python capture_service/capture.py"
+echo ""
+echo "Logs: cd docker && docker compose logs -f"
+echo "Stop: cd docker && docker compose down"

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sentinelai.capture</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/smangavilakazi/sentinel-ai-ids/.venv/bin/python</string>
+        <string>/Users/smangavilakazi/sentinel-ai-ids/capture_service/capture.py</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CAPTURE_INTERFACE</key>
+        <string>en1</string>
+        <key>REDIS_HOST</key>
+        <string>localhost</string>
+        <key>REDIS_PORT</key>
+        <string>6379</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/smangavilakazi/sentinel-ai-ids</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/smangavilakazi/sentinel-ai-ids/logs/capture.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/smangavilakazi/sentinel-ai-ids/logs/capture.error.log</string>
+</dict>
+</plist>
