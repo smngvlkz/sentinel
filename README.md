@@ -4,6 +4,10 @@ Real-time network intrusion detection system with rule-based and ML anomaly dete
 
 SentinelAI captures live network traffic, extracts flow-level features, runs them through a detection engine, and surfaces threats on a monitoring dashboard. It is designed to run continuously on a local machine or server.
 
+## Dashboard
+
+![SentinelAI Dashboard](docs/dashboard.png)
+
 ## Architecture
 
 ```
