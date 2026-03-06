@@ -1,0 +1,61 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentinel_ai
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: unless-stopped
+
+  capture:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.capture
+    network_mode: host
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOST: localhost
+      CAPTURE_INTERFACE: en0
+    restart: unless-stopped
+
+  analyzer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analyzer
+    depends_on:
+      - redis
+      - postgres
+    env_file:
+      - ../.env
+    restart: unless-stopped
+
+  dashboard-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ../.env
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
