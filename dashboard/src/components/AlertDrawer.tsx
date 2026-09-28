@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import type { Alert } from "@/lib/api";
-import { FEATURE_LABELS, threatInfo } from "@/lib/threats";
+import { crowdLabel, DEFAULT_FEATURES, FEATURE_LABELS, threatInfo } from "@/lib/threats";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { Address, Label, OriginTag, SeverityIndicator, ThreatIcon } from "./ui";
 
@@ -65,7 +65,10 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNext }: 
     };
   }, [onClose]);
 
-  const features = Object.entries(FEATURE_LABELS).filter(([key]) => alert.features?.[key] != null);
+  const features = (info.features ?? DEFAULT_FEATURES)
+    .filter((key) => FEATURE_LABELS[key] && alert.features?.[key] != null)
+    .map((key) => [key, FEATURE_LABELS[key]] as const);
+  const crowd = crowdLabel(alert.threat_type, alert.features);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -161,11 +164,13 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNext }: 
         <dl className="mx-6 mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 rounded-xl border border-line bg-bg-2 p-4">
           <Label as="dt">From</Label>
           <dd className="flex flex-wrap items-center gap-2">
+            {crowd?.side === "source" && <span className="font-medium">{crowd.text}, latest</span>}
             <Address ip={alert.source_ip} port={alert.source_port} />
             <OriginTag ip={alert.source_ip} />
           </dd>
           <Label as="dt">To</Label>
           <dd className="flex flex-wrap items-center gap-2">
+            {crowd?.side === "destination" && <span className="font-medium">{crowd.text}, latest</span>}
             <Address ip={alert.destination_ip} port={alert.destination_port} />
             <OriginTag ip={alert.destination_ip} />
           </dd>

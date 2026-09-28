@@ -128,3 +128,12 @@ def test_flow_features_are_unchanged():
     for key in ("packet_rate", "byte_rate", "avg_packet_size", "packet_size", "unique_dst_ports",
                 "unanswered_syn_ports", "flow_duration", "total_packets", "total_bytes", "syn_ratio"):
         assert key in f
+
+
+def test_is_local():
+    from analysis_service.connections import is_local
+    for ip in ("192.168.1.10", "10.0.0.5", "172.16.3.4", "127.0.0.1", "169.254.1.1", "fe80::1", "fd00::1"):
+        assert is_local(ip), ip
+    # Documentation ranges stand in for the internet in the demo and tests.
+    for ip in ("203.0.113.66", "198.51.100.23", "192.0.2.1", "8.8.8.8", "172.32.0.1", "2001:db8::1", "not-an-ip"):
+        assert not is_local(ip), ip

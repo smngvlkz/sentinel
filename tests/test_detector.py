@@ -112,3 +112,16 @@ class TestDetectionEngine:
         engine.detect(normal_features, packet)
         engine.forget_idle(now=float(packet["timestamp"]) + 301)
         assert engine._last_judged == {}
+
+    def test_connection_rules_name_the_initiator(self, packet, normal_features):
+        """A reply packet (from the responder) still reports the attacker as the source."""
+        engine = self._build_engine(rule_results=["REQUEST_FLOOD"])
+        reply = {**packet, "src_ip": "192.168.10.50", "src_port": "80", "dst_ip": "172.16.0.1", "dst_port": "20001"}
+        threat = engine.detect({**normal_features, "from_initiator": 0.0}, reply)[0]
+        assert (threat["source_ip"], threat["destination_ip"]) == ("172.16.0.1", "192.168.10.50")
+        assert threat["destination_port"] == "80"
+
+    def test_multi_host_rules_are_grouped(self, packet, normal_features):
+        engine = self._build_engine(rule_results=["DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "PORT_SCAN"])
+        groups = {t["type"]: t.get("group") for t in engine.detect(normal_features, packet)}
+        assert groups == {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "PORT_SCAN": None}

@@ -36,6 +36,24 @@ max_avg_packet_size = 300
 # Fraction of packets that are TCP ACKs; established transfers are mostly ACKs.
 max_ack_ratio = 0.5
 
+[request_flood]
+# One source opening completed TCP connections to one service (host and
+# port), e.g. an HTTP flood. On CIC-IDS2017 the busiest normal traffic
+# peaked at 251 in 10 seconds; the HTTP flood ran at around 800.
+min_new_connections_10s = 400
+
+[distributed_flood]
+# Different internet hosts opening connections to one of your hosts within
+# a minute. Raise it if you run a public server, or peer-to-peer software
+# that accepts many incoming connections.
+min_external_sources_60s = 50
+
+[network_sweep]
+# Different hosts on your network that one source contacted on the same port
+# within a minute: how worms and scanners look for targets. Normal traffic on
+# CIC-IDS2017 peaked at 7 (Windows name lookups).
+min_local_hosts_60s = 20
+
 [rate_evidence]
 # Rate-based rules (syn_flood, high_frequency) wait until a flow has this
 # much history. A single packet otherwise reads as 1000 packets/second.

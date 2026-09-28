@@ -41,13 +41,13 @@ class TestAlertFilter:
     def test_high_matches_high_types(self):
         where, params = api.alert_filter(24, "high")
         assert "threat_type = ANY(%s)" in where
-        assert params[1] == ["SYN_FLOOD"]
+        assert params[1] == [t for t, sev in api.SEVERITY.items() if sev == "high"]
 
     def test_low_includes_unknown_types(self):
         """Low is 'anything not high or medium', so new rule types still show up."""
         where, params = api.alert_filter(24, "low")
         assert "threat_type <> ALL(%s)" in where
-        assert set(params[1]) == {"SYN_FLOOD", "PORT_SCAN", "HIGH_FREQUENCY", "ANOMALY"}
+        assert set(params[1]) == {t for t, sev in api.SEVERITY.items() if sev != "low"}
 
     def test_review_status(self):
         assert "reviewed_at IS NULL" in api.alert_filter(24, status="unreviewed")[0]
@@ -94,3 +94,12 @@ class TestMutationGuard:
         with pytest.raises(api.HTTPException) as e:
             api.check_mutation_headers("http://localhost:3001", "text/plain")
         assert e.value.status_code == 415
+
+
+def test_api_and_dashboard_agree_on_severity():
+    """The API filters and counts by severity; the dashboard labels by it. They must match."""
+    import re
+
+    ts = open(os.path.join(os.path.dirname(__file__), "..", "dashboard", "src", "lib", "threats.ts")).read()
+    dashboard = dict(re.findall(r"\n  ([A-Z_]+): \{\n    name: \"[^\"]+\",\n    severity: \"(\w+)\"", ts))
+    assert dashboard == api.SEVERITY

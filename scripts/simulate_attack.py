@@ -32,20 +32,33 @@ SYN_FLOOD_SRC = "203.0.113.66"
 PORT_SCAN_SRC = "198.51.100.23"
 LARGE_PAYLOAD_SRC = "203.0.113.140"
 HIGH_FREQ_SRC = "198.51.100.77"
+REQUEST_FLOOD_SRC = "198.51.100.44"
+# A compromised device on your network, for the sweep.
+SWEEP_SRC = "192.168.1.66"
 
 
-def packet(src, dst, dst_port, size, flags="", transport="TCP"):
+def packet(src, dst, dst_port, size, flags="", transport="TCP", src_port=None):
     return {
         "timestamp": str(time.time()),
         "src_ip": src,
         "dst_ip": dst,
-        "src_port": str(random.randint(49152, 65535)),
+        "src_port": str(src_port if src_port is not None else random.randint(49152, 65535)),
         "dst_port": str(dst_port),
         "packet_size": str(size),
         "flags": flags,
         "protocol": "6" if transport == "TCP" else "17",
         "transport": transport,
     }
+
+
+def handshake(src, dst, dst_port):
+    """A completed TCP connection: SYN, SYN-ACK, ACK on matching ports."""
+    sport = random.randint(49152, 65535)
+    return [
+        packet(src, dst, dst_port, 60, "S", src_port=sport),
+        packet(dst, src, sport, 60, "SA", src_port=dst_port),
+        packet(src, dst, dst_port, 52, "A", src_port=sport),
+    ]
 
 
 def background():
@@ -68,6 +81,16 @@ def attacks_for(second, scan_port):
         return [packet(LARGE_PAYLOAD_SRC, VICTIM, 9999, 15_000, transport="UDP")]
     if 40 <= second < 43:
         return [packet(HIGH_FREQ_SRC, VICTIM, 53, 128, transport="UDP") for _ in range(150)]
+    if 20 <= second < 24:
+        # Request flood: 200 completed connections a second to the web server.
+        return [p for _ in range(20) for p in handshake(REQUEST_FLOOD_SRC, VICTIM, 80)]
+    if 46 <= second < 47:
+        # Distributed flood: 80 different internet hosts in one second.
+        return [packet(f"198.51.100.{150 + i}", VICTIM, 443, 60, "S") for i in range(8 * int((second - 46) * 10), 8 * int((second - 46) * 10) + 8)]
+    if 52 <= second < 54:
+        # Network sweep: a local device trying Windows file sharing on 40 others.
+        start = 2 * int((second - 52) * 10)
+        return [packet(SWEEP_SRC, f"192.168.1.{100 + i}", 445, 60, "S") for i in range(start, start + 2)]
     return []
 
 

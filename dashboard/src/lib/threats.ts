@@ -12,6 +12,10 @@ export interface ThreatInfo {
   headline: (src: string, dst: string) => string;
   what: string;
   nextSteps: string[];
+  /** Which of the alert's recorded numbers to show; defaults to the per-flow ones. */
+  features?: string[];
+  /** For threats involving many hosts: which side is the crowd, and the feature counting it. */
+  crowd?: { side: "source" | "destination"; feature: string; noun: string };
 }
 
 export const THREATS: Record<string, ThreatInfo> = {
@@ -70,6 +74,47 @@ export const THREATS: Record<string, ThreatInfo> = {
       "If normal activity keeps getting flagged, record more baseline traffic and retrain (make train-collect, then make train-model).",
     ],
   },
+  REQUEST_FLOOD: {
+    name: "Request flood",
+    severity: "high",
+    headline: (src, dst) => `${src} flooded ${dst} with requests`,
+    what:
+      "One device opened hundreds of complete connections to a single service within seconds, far faster than any normal app. This is how HTTP floods take down websites and apps: each request looks legitimate on its own, but the volume doesn't.",
+    nextSteps: [
+      "If the source is on the internet, block it at your router's firewall, or rate-limit the service if it's meant to be public.",
+      "If the source is one of your own devices, find the program responsible. It could be a misbehaving app, a stuck script, or malware.",
+      "If you were load-testing a server on purpose, raise request_flood.min_new_connections_10s in config/detection.toml.",
+    ],
+    features: ["service_new_conns_10s", "conn_packets_out", "conn_packets_in", "conn_bytes_in"],
+  },
+  DISTRIBUTED_FLOOD: {
+    name: "Distributed flood",
+    severity: "high",
+    headline: (_src, dst) => `Many internet hosts converged on ${dst}`,
+    what:
+      "Dozens of different internet hosts started connecting to one of your devices within a minute. Spreading an attack across many machines, often a botnet, is how distributed denial-of-service (DDoS) attacks get past limits that stop any single source.",
+    nextSteps: [
+      "If this device isn't meant to accept connections from the internet, check your router for port forwarding or UPnP rules exposing it.",
+      "If it's a server, your hosting provider or ISP can filter a large attack before it reaches you.",
+      "Peer-to-peer software (torrents, some games) can look like this. If that's expected, raise distributed_flood.min_external_sources_60s.",
+    ],
+    features: ["responder_external_sources_60s", "responder_new_conns_10s"],
+    crowd: { side: "source", feature: "responder_external_sources_60s", noun: "internet sources" },
+  },
+  NETWORK_SWEEP: {
+    name: "Network sweep",
+    severity: "medium",
+    headline: (src) => `${src} probed many devices on your network`,
+    what:
+      "One device tried to connect to many other devices on your network, all on the same port, within a minute. That's how worms spread and how attackers map a network after getting in.",
+    nextSteps: [
+      "If you don't recognise the source device, disconnect it from the network and investigate.",
+      "Network inventory tools, some printers and media servers scan like this. If it's one of those, raise network_sweep.min_local_hosts_60s.",
+      "Note the port: 445 is Windows file sharing and 22 is SSH, both favourite targets.",
+    ],
+    features: ["initiator_same_port_local_hosts_60s", "initiator_new_conns_60s"],
+    crowd: { side: "destination", feature: "initiator_same_port_local_hosts_60s", noun: "devices" },
+  },
 };
 
 export function threatInfo(type: string): ThreatInfo {
@@ -94,4 +139,28 @@ export const FEATURE_LABELS: Record<string, { label: string; format: (v: number)
   flow_duration: { label: "Conversation length", format: (v) => `${v.toFixed(1)} s` },
   avg_packet_size: { label: "Average packet size", format: (v) => `${v.toFixed(0)} bytes` },
   byte_rate: { label: "Data rate", format: (v) => `${(v / 1024).toFixed(1)} KB/s` },
+  service_new_conns_10s: { label: "New connections to this service in 10 s", format: (v) => v.toLocaleString() },
+  conn_packets_out: { label: "Packets sent in this connection", format: (v) => v.toLocaleString() },
+  conn_packets_in: { label: "Packets received in this connection", format: (v) => v.toLocaleString() },
+  conn_bytes_in: { label: "Data received in this connection", format: (v) => `${(v / 1024).toFixed(1)} KB` },
+  responder_external_sources_60s: { label: "Internet hosts connecting in 60 s", format: (v) => v.toLocaleString() },
+  responder_new_conns_10s: { label: "New connections to this device in 10 s", format: (v) => v.toLocaleString() },
+  initiator_same_port_local_hosts_60s: { label: "Devices contacted on this port in 60 s", format: (v) => v.toLocaleString() },
+  initiator_new_conns_60s: { label: "Connections opened in 60 s", format: (v) => v.toLocaleString() },
 };
+
+// The per-flow numbers shown for threats that don't choose their own.
+export const DEFAULT_FEATURES = [
+  "packet_rate", "syn_ratio", "unique_dst_ports", "packet_size", "total_packets", "flow_duration", "avg_packet_size", "byte_rate",
+];
+
+/** "63 internet sources" for threats involving many hosts on one side, else null. */
+export function crowdLabel(type: string, features: Record<string, number> | undefined): {
+  side: "source" | "destination";
+  text: string;
+} | null {
+  const crowd = threatInfo(type).crowd;
+  const count = crowd && features?.[crowd.feature];
+  if (!crowd || !count) return null;
+  return { side: crowd.side, text: `${count.toLocaleString()} ${crowd.noun}` };
+}

@@ -41,7 +41,8 @@ from detection_engine.config import has_rate_evidence, load_config  # noqa: E402
 from detection_engine.rules import RuleEngine  # noqa: E402
 
 BENIGN = "BENIGN"
-RULE_TYPES = {"SYN_FLOOD", "PORT_SCAN", "HIGH_FREQUENCY", "LARGE_PAYLOAD"}
+# Every rule's alert type, read from the engine so new rules are always included.
+RULE_TYPES = {name for name, _ in RuleEngine(config={}).rules}
 # The analyzer drops flows idle for 30s, checking every 60s.
 CLEANUP_INTERVAL = 60.0
 
@@ -583,6 +584,49 @@ def synthetic_capture() -> tuple[list, Labels]:
     # One oversized UDP packet (a real jumbo, not merged TCP segments).
     keys[pair_key("203.0.113.140", VICTIM)] = "Oversized packet"
     add(60, IP(src="203.0.113.140", dst=VICTIM) / UDP(sport=1234, dport=9999) / Raw(b"x" * 15000))
+
+    # Request flood (HTTP flood shape): 60 completed connections a second.
+    flood_src = "198.51.100.44"
+    keys[pair_key(flood_src, VICTIM)] = "Request flood"
+    for i in range(600):
+        t, sport = 70 + i / 60, 20000 + i
+        add(t, IP(src=flood_src, dst=VICTIM) / TCP(sport=sport, dport=80, flags="S"))
+        add(t + 0.001, IP(src=VICTIM, dst=flood_src) / TCP(sport=80, dport=sport, flags="SA"))
+        add(t + 0.002, IP(src=flood_src, dst=VICTIM) / TCP(sport=sport, dport=80, flags="A"))
+
+    # A busy DNS resolver: hundreds of lookups a second is normal, and it's UDP.
+    resolver, upstream = "192.168.1.3", "192.0.2.53"
+    keys[pair_key(resolver, upstream)] = BENIGN
+    for i in range(1500):
+        add(70 + i / 150, IP(src=resolver, dst=upstream) / UDP(sport=30000 + i, dport=53) / Raw(b"q" * 40))
+
+    # Distributed flood: 80 internet hosts, each retrying once (as TCP does).
+    for i in range(80):
+        src = f"198.51.100.{150 + i}"
+        keys[pair_key(src, VICTIM)] = "Distributed flood"
+        for retry in (0, 3):
+            add(90 + i * 0.02 + retry, IP(src=src, dst=VICTIM) / TCP(sport=41000 + i, dport=443, flags="S"))
+
+    # An office file server used by 40 local devices: many sources, all local.
+    office_server = "192.168.1.5"
+    for i in range(40):
+        client = f"192.168.1.{150 + i}"
+        keys[pair_key(client, office_server)] = BENIGN
+        add(100 + i * 0.05, IP(src=client, dst=office_server) / TCP(sport=45000 + i, dport=445, flags="S"))
+
+    # Network sweep: a local device trying port 445 on 30 others, twice.
+    sweeper = "192.168.1.66"
+    for i in range(30):
+        target = f"192.168.1.{200 + i}"
+        keys[pair_key(sweeper, target)] = "Network sweep"
+        for retry in (0, 3):
+            add(110 + i * 0.05 + retry, IP(src=sweeper, dst=target) / TCP(sport=46000 + i, dport=445, flags="S"))
+
+    # A resolver asking 60 internet DNS servers: many hosts, but not local.
+    for i in range(60):
+        server = f"192.0.2.{100 + i}"
+        keys[pair_key(resolver, server)] = BENIGN
+        add(120 + i * 0.05, IP(src=resolver, dst=server) / UDP(sport=33000 + i, dport=53) / Raw(b"q" * 40))
 
     pkts.sort(key=lambda p: p.time)
     return pkts, Labels(by_connection=False, keys=keys)

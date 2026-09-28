@@ -136,6 +136,9 @@ FastAPI ──── Next.js dashboard
 | Port scan (`PORT_SCAN`) | One source tries to connect to many ports on one host that never answer | > 20 ports |
 | Traffic burst (`HIGH_FREQUENCY`) | A flood of small packets outside an established TCP connection | > 1,000 packets/s, average < 300 bytes |
 | Oversized packet (`LARGE_PAYLOAD`) | A packet far larger than any network carries, outside an established TCP connection | > 10,000 bytes |
+| Request flood (`REQUEST_FLOOD`) | One source opening completed connections to one service very fast, e.g. an HTTP flood | > 400 in 10 s |
+| Distributed flood (`DISTRIBUTED_FLOOD`) | Many internet hosts connecting to one of your devices at once | > 50 sources in 60 s |
+| Network sweep (`NETWORK_SWEEP`) | One source contacting many devices on your network on the same port | > 20 devices in 60 s |
 | Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
 
 Rate-based rules wait until a flow has at least 10 packets over 0.1 seconds,
@@ -154,19 +157,22 @@ the repo, point `SENTINEL_CONFIG` at your own copy.
 ## Accuracy
 
 Measured on the Friday capture of [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html),
-a public dataset of real traffic with labelled attacks (9.9 million packets):
+a public dataset of real traffic with labelled attacks (9.9 million packets).
+Some thresholds were tuned on this same day, so treat these as optimistic;
+details in [docs/evaluation.md](docs/evaluation.md):
 
 | | Result |
 |---|---|
 | Port-scan connections caught | **99.8%** |
+| HTTP flood (DDoS) connections caught | **100%** |
 | Normal connections wrongly flagged by the rules | **0.01%** |
-| DDoS (HTTP flood) minutes caught, rules + anomaly model | 25 of 34 (rules alone: 4) |
 | Botnet traffic caught | None: it looks like ordinary browsing |
 
-The anomaly model's cost is noise: about 0.56% of normal minutes get a
-false "Unusual traffic" alert. Methodology, full results and how to
-reproduce them: [docs/evaluation.md](docs/evaluation.md). `make evaluate`
-runs a built-in self-test as part of CI.
+The optional anomaly model adds no detection on this capture and costs
+about 0.56% of normal minutes in false "Unusual traffic" alerts.
+Methodology, full results and how to reproduce them:
+[docs/evaluation.md](docs/evaluation.md). `make evaluate` runs a built-in
+self-test as part of CI.
 
 ## Train the anomaly model (optional)
 

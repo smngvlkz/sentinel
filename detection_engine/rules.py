@@ -22,6 +22,9 @@ class RuleEngine:
             ("PORT_SCAN", self._port_scan),
             ("LARGE_PAYLOAD", self._large_payload),
             ("HIGH_FREQUENCY", self._high_frequency),
+            ("REQUEST_FLOOD", self._request_flood),
+            ("DISTRIBUTED_FLOOD", self._distributed_flood),
+            ("NETWORK_SWEEP", self._network_sweep),
         ]
 
     def evaluate(self, features: dict[str, float]) -> list[str]:
@@ -61,3 +64,20 @@ class RuleEngine:
             and f["ack_ratio"] < c["max_ack_ratio"]
             and self._has_rate_evidence(f)
         )
+
+    # The rules below use connection and per-host window features. .get()
+    # keeps them from failing on feature sets built without those.
+
+    def _request_flood(self, f: dict[str, float]) -> bool:
+        # Completed TCP connections only: a SYN flood never completes them
+        # (SYN_FLOOD covers that), and busy UDP services like DNS aren't
+        # connections in this sense.
+        return bool(f.get("conn_established")) and (
+            f.get("service_new_conns_10s", 0) > self.config["request_flood"]["min_new_connections_10s"]
+        )
+
+    def _distributed_flood(self, f: dict[str, float]) -> bool:
+        return f.get("responder_external_sources_60s", 0) > self.config["distributed_flood"]["min_external_sources_60s"]
+
+    def _network_sweep(self, f: dict[str, float]) -> bool:
+        return f.get("initiator_same_port_local_hosts_60s", 0) > self.config["network_sweep"]["min_local_hosts_60s"]

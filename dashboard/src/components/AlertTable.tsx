@@ -2,7 +2,7 @@
 
 import { Check } from "lucide-react";
 import type { Alert, ReviewStatus, Stats } from "@/lib/api";
-import { threatInfo, type Severity } from "@/lib/threats";
+import { crowdLabel, threatInfo, type Severity } from "@/lib/threats";
 import { formatDateTime, shortAgo } from "@/lib/format";
 import { Address, Card, SeverityIndicator, ThreatIcon } from "./ui";
 
@@ -140,10 +140,10 @@ export default function AlertTable({
                       <SeverityIndicator severity={info.severity} />
                     </span>
                     <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-fg-2">
-                      <Address ip={a.source_ip} />
+                      <Endpoint alert={a} side="source" />
                       <span className="flex items-center gap-1.5">
                         <span className="text-fg-muted">→</span>
-                        <Address ip={a.destination_ip} port={a.destination_port} />
+                        <Endpoint alert={a} side="destination" />
                       </span>
                     </span>
                   </span>
@@ -203,10 +203,10 @@ export default function AlertTable({
                     <SeverityIndicator severity={info.severity} />
                   </td>
                   <td className="px-3 py-2.5">
-                    <Address ip={a.source_ip} />
+                    <Endpoint alert={a} side="source" />
                   </td>
                   <td className="px-3 py-2.5">
-                    <Address ip={a.destination_ip} port={a.destination_port} />
+                    <Endpoint alert={a} side="destination" />
                   </td>
                   <td className="py-2.5 pr-5 pl-3 text-right font-mono text-xs whitespace-nowrap text-fg-3">
                     <span className="inline-flex items-center gap-1.5" title={formatDateTime(a.timestamp)}>
@@ -267,5 +267,16 @@ function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+/** One address, or "63 internet sources" when that side of the alert is a crowd. */
+function Endpoint({ alert, side }: { alert: Alert; side: "source" | "destination" }) {
+  const crowd = crowdLabel(alert.threat_type, alert.features);
+  if (crowd?.side === side) return <span className="text-[13px] font-medium">{crowd.text}</span>;
+  return side === "source" ? (
+    <Address ip={alert.source_ip} />
+  ) : (
+    <Address ip={alert.destination_ip} port={alert.destination_port} />
   );
 }

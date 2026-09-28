@@ -1,4 +1,15 @@
-import { Activity, Package, Radar, ShieldAlert, Shuffle, Waves, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Network,
+  Package,
+  Radar,
+  ServerCrash,
+  ShieldAlert,
+  Shuffle,
+  Waves,
+  Waypoints,
+  type LucideIcon,
+} from "lucide-react";
 import type { Severity } from "@/lib/threats";
 import { ipOrigin, ORIGIN_LABEL } from "@/lib/format";
 
@@ -96,6 +107,9 @@ const THREAT_ICON: Record<string, LucideIcon> = {
   HIGH_FREQUENCY: Activity,
   LARGE_PAYLOAD: Package,
   ANOMALY: Shuffle,
+  REQUEST_FLOOD: ServerCrash,
+  DISTRIBUTED_FLOOD: Network,
+  NETWORK_SWEEP: Waypoints,
 };
 
 /** Monochrome icon for a threat type; shape, not colour, tells types apart. */

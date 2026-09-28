@@ -5,9 +5,10 @@
 `make evaluate` replays a built-in labelled capture through the real
 pipeline (packet parsing, flow tracking and the rules) and reports what was
 caught and what was wrongly flagged. The capture has one of each attack,
-plus normal traffic that fooled earlier versions: ordinary browsing, a fast
-download, a download recorded as merged oversized frames, an FTP session and
-a website replying to many connections at once.
+plus normal traffic that fooled earlier versions or looks like an attack:
+ordinary browsing, a fast download, a download recorded as merged oversized
+frames, an FTP session, a website replying to many connections at once, a
+busy DNS resolver, and an office server used by many local devices.
 
 | Attack | Detected |
 |--------|----------|
@@ -15,7 +16,10 @@ a website replying to many connections at once.
 | Port scan | Yes |
 | UDP flood | Yes |
 | Oversized packet | Yes |
-| **Normal traffic wrongly flagged** | **0 of 14 host pairs** |
+| Request flood | Yes |
+| Distributed flood (80 sources) | Yes, every source |
+| Network sweep (30 devices) | Yes, every target |
+| **Normal traffic wrongly flagged** | **0 of 115 host pairs** |
 
 It runs in a few seconds and is part of the test suite, so a change that
 makes detection worse fails CI.
@@ -30,10 +34,17 @@ The full Friday capture (9,915,680 packets, 08:59–17:02), replayed with the
 detection rules only. Each labelled connection is scored: detected if
 SentinelAI raised an alert on any of its packets.
 
+> **Read these numbers as optimistic.** The request-flood, distributed-flood
+> and network-sweep thresholds were chosen by measuring Friday's normal
+> traffic, and then scored on the same day. The false alarm rate in
+> particular reflects a threshold picked to clear Friday's busiest normal
+> traffic. A held-out day, with every threshold frozen, is the fair test;
+> results for Wednesday will be added here when that run is done.
+
 | Attack | Connections | Detected | Recall |
 |--------|------------:|---------:|-------:|
-| Port scan | 158,420 | 158,053 | **99.8%** |
-| DDoS (HTTP flood) | 45,383 | 181 | 0.4% |
+| Port scan | 158,420 | 158,064 | **99.8%** |
+| DDoS (HTTP flood) | 45,383 | 45,383 | **100%** |
 | Botnet (Ares) | 1,228 | 0 | 0% |
 
 | Normal traffic | |
@@ -46,21 +57,26 @@ SentinelAI raised an alert on any of its packets.
 
 - **Port scans are caught almost completely,** the job the port-scan rule is
   built for.
-- **The DDoS and botnet are mostly missed, and that's expected from the
-  rules.** The DDoS is an HTTP flood (LOIC): complete, normal-looking web
-  requests rather than the SYN or UDP floods the rules look for. The botnet
-  talks to its controller over ordinary-looking HTTP. Neither matches a
-  signature, which is the gap the anomaly model is meant to cover.
-  Application-layer attacks like these need deeper inspection than packet
-  headers.
+- **The HTTP flood is caught by the request-flood rule.** It's made of
+  complete, normal-looking web requests, which is why the SYN and packet
+  flood rules missed it (they caught 0.4%). What gives it away is volume: one
+  source opening around 800 completed connections to one web server every 10
+  seconds, against a peak of 251 for the busiest normal traffic that day.
+- **The botnet is missed.** It talks to its controller over ordinary-looking
+  web traffic, at a normal rate. Catching it needs a different signal, such
+  as the regular timing of its check-ins.
 - **About the false alarm count:** scored strictly against the dataset's
-  labels, 848 normal connections (0.44%) were flagged. 828 of those are
+  labels, 933 normal connections (0.49%) were flagged. 913 of those are
   between the attacker and the victim during the DDoS, on more than 20,000
   different ports, but labelled as normal. CIC-IDS2017 has known labelling
   errors of this kind (see Engelen, Rimmer and Joosen, *Troubleshooting an
   Intrusion Detection Dataset: the CICIDS2017 Case Study*, IEEE Security and
   Privacy Workshops 2021), so they're left out of the numbers above.
   `scripts/evaluate.py` prints the strict figure.
+- **Not measured here:** Friday has no distributed flood (the "DDoS" came
+  from a single machine) and no network sweep, so those two rules are only
+  covered by the self-test. Neither raised a single false alarm across the
+  day.
 
 The first run on this data flagged normal FTP sessions and large downloads,
 which led to two fixes: established TCP traffic is no longer checked for
@@ -76,21 +92,29 @@ reports: **for each minute of traffic between two hosts, was there an alert?**
 
 | Attack minutes caught | Rules | Model | Both |
 |---|---:|---:|---:|
-| DDoS (HTTP flood) | 4 of 34 | 22 of 34 | **25 of 34** |
+| DDoS (HTTP flood) | 25 of 34 | 22 of 34 | 25 of 34 |
 | Port scan | 9 of 19 | 4 of 19 | 9 of 19 |
 | Botnet (Ares) | 0 of 599 | 0 of 599 | 0 of 599 |
 | **Normal minutes wrongly flagged** | 0.01% | 0.56% | 0.57% |
 
-- **The model catches the DDoS the rules miss:** 25 of 34 attack minutes with
-  both, against 4 with rules alone.
+- **On this capture the model adds no detection.** It independently catches
+  most of the HTTP flood, but the request-flood rule now catches everything
+  it does. Its value is for patterns no rule describes, which a single day of
+  labelled attacks can't show.
 - **The cost is noise.** 0.56% of normal minutes on this 12-computer office
   network means roughly one false "Unusual traffic" alert a minute across
   the working day. That's why the model's alerts are rated medium ("Worth
-  checking"), never high.
-- **The botnet goes undetected.** Its traffic looks like ordinary web
-  browsing in packet headers alone.
-- **Slow port scans slip through.** Port scans are 99.8% caught by
-  connection, but minutes where a scanner touched fewer than 21 ports aren't.
+  checking"), never high, and why it's optional.
+- **Every minute of the HTTP flood itself (15:56–16:16) raised an alert.**
+  The DDoS minutes counted as missed are elsewhere: scattered minutes hours
+  earlier, each holding 1 to 8 connections labelled DDoS (56 connections in
+  all, against about 45,000 in the flood). They sit well outside the attack
+  window, so they're most likely another labelling quirk, and no volume rule
+  should fire on a handful of connections.
+- **Small scans slip through.** The port-scan minutes missed held 305 of
+  about 158,900 scan connections, and each probed 5 or fewer different
+  ports: short reconnaissance runs rather than full scans. The port-scan
+  rule needs more than 20 unanswered ports, so these stay below it.
 
 **How these settings were chosen:** judging every packet caught the same DDoS
 minutes with nearly twice the false alarms (0.96%), because a busy

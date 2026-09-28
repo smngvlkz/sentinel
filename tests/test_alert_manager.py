@@ -80,3 +80,32 @@ class TestPrune:
         manager.prune(now=1100.0)
         manager.handle([SYN_FLOOD], _packet(1100.0), {})
         assert manager.store.call_count == 2
+
+
+class TestMultiHostGrouping:
+    """Attacks involving many hosts must not become one alert per host."""
+
+    def test_distributed_flood_is_one_alert_per_victim(self, manager):
+        threat = {"type": "DISTRIBUTED_FLOOD", "source": "rules", "confidence": 0.9, "group": "destination"}
+        for i in range(100):
+            manager.handle([threat], _packet(1000.0 + i * 0.1, src=f"203.0.113.{i}"), {})
+        assert manager.store.call_count == 1
+
+    def test_distributed_floods_on_two_victims_are_separate(self, manager):
+        threat = {"type": "DISTRIBUTED_FLOOD", "source": "rules", "confidence": 0.9, "group": "destination"}
+        manager.handle([threat], _packet(1000.0, src="203.0.113.1", dst="192.168.1.10"), {})
+        manager.handle([threat], _packet(1000.0, src="203.0.113.2", dst="192.168.1.11"), {})
+        assert manager.store.call_count == 2
+
+    def test_sweep_is_one_alert_per_scanner(self, manager):
+        threat = {"type": "NETWORK_SWEEP", "source": "rules", "confidence": 0.9, "group": "source"}
+        for i in range(50):
+            manager.handle([threat], _packet(1000.0 + i * 0.1, src="192.168.1.66", dst=f"192.168.1.{100 + i}"), {})
+        assert manager.store.call_count == 1
+
+    def test_threat_endpoints_override_the_packet(self, manager):
+        """Connection rules name the initiator even when a reply packet triggered them."""
+        threat = {"type": "REQUEST_FLOOD", "source": "rules", "confidence": 0.9,
+                  "source_ip": "172.16.0.1", "destination_ip": "192.168.10.50"}
+        reply = _packet(1000.0, src="192.168.10.50", dst="172.16.0.1")
+        assert manager._endpoints(threat, reply)[:2] == ("172.16.0.1", "192.168.10.50")

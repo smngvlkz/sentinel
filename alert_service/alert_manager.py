@@ -73,12 +73,35 @@ class AlertManager:
     ) -> None:
         now = float(packet.get("timestamp", time.time()))
         for threat in threats:
-            key = (str(threat["type"]), packet.get("src_ip", "?"), packet.get("dst_ip", "?"))
-            suppressed = self._suppress(key, now)
+            suppressed = self._suppress(self._key(threat, packet), now)
             if suppressed is None:
                 continue
             self._log(threat, packet, suppressed)
             self._store(threat, packet, features)
+
+    @staticmethod
+    def _endpoints(threat: dict[str, object], packet: dict[str, str]) -> tuple[str, str, str, str]:
+        """(src ip, dst ip, src port, dst port): the threat's own if it names them, else the packet's."""
+        return (
+            str(threat.get("source_ip") or packet.get("src_ip", "?")),
+            str(threat.get("destination_ip") or packet.get("dst_ip", "?")),
+            str(threat.get("source_port") or packet.get("src_port", "")),
+            str(threat.get("destination_port") or packet.get("dst_port", "")),
+        )
+
+    def _key(self, threat: dict[str, object], packet: dict[str, str]) -> AlertKey:
+        """
+        Repeats of the same key are suppressed. Normally that's one threat
+        between one source and destination; threats involving many hosts
+        group on the side that stays the same.
+        """
+        src, dst, _, _ = self._endpoints(threat, packet)
+        group = threat.get("group")
+        if group == "destination":
+            src = "*"
+        elif group == "source":
+            dst = "*"
+        return (str(threat["type"]), src, dst)
 
     def _suppress(self, key: AlertKey, now: float) -> int | None:
         """Return None to drop a repeat alert, else how many were dropped before it."""
@@ -98,11 +121,12 @@ class AlertManager:
         return len(expired)
 
     def _log(self, threat: dict[str, object], packet: dict[str, str], suppressed: int = 0) -> None:
+        src, dst, _, _ = self._endpoints(threat, packet)
         log.warning(
             "%s src=%s dst=%s conf=%.2f engine=%s%s",
             threat["type"],
-            packet.get("src_ip", "?"),
-            packet.get("dst_ip", "?"),
+            src,
+            dst,
             threat.get("confidence", 0),
             threat.get("source", "?"),
             f" (+{suppressed} suppressed)" if suppressed else "",
@@ -118,6 +142,7 @@ class AlertManager:
             self._reconnect()
         if self.conn is None:
             return
+        src, dst, sport, dport = self._endpoints(threat, packet)
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
@@ -129,10 +154,10 @@ class AlertManager:
                     (
                         float(packet.get("timestamp", str(time.time()))),
                         threat["type"],
-                        packet.get("src_ip"),
-                        packet.get("dst_ip"),
-                        packet.get("src_port"),
-                        packet.get("dst_port"),
+                        src,
+                        dst,
+                        sport,
+                        dport,
                         threat.get("confidence", 0),
                         threat.get("source", "unknown"),
                         json.dumps(features),
