@@ -3,12 +3,16 @@ Flow-based feature extraction.
 
 Tracks one-way flows (source -> destination) and computes statistical
 features used by both the rule engine and the anomaly detection model.
+Connection-level (both directions) and per-host windowed features come
+from connections.py and are added alongside.
 """
 
 from __future__ import annotations
 
 import time
 from collections import defaultdict
+
+from .connections import ConnectionTable, HostActivity, connection_features
 
 
 class FlowTracker:
@@ -33,6 +37,8 @@ class FlowTracker:
         })
         self.flow_timeout = flow_timeout
         self.ip_connection_counts: dict[str, int] = defaultdict(int)
+        self.connections = ConnectionTable()
+        self.hosts = HostActivity()
 
     def _flow_key(self, packet: dict[str, str]) -> tuple[str, str]:
         return (packet["src_ip"], packet["dst_ip"])
@@ -67,6 +73,10 @@ class FlowTracker:
 
         duration = max(now - flow["start_time"], 0.001)
 
+        conn, is_new, outbound = self.connections.update(packet)
+        if is_new:
+            self.hosts.record(conn)
+
         return {
             "packet_rate": flow["packet_count"] / duration,
             "byte_rate": flow["total_bytes"] / duration,
@@ -86,6 +96,8 @@ class FlowTracker:
             "src_connection_count": self.ip_connection_counts[packet["src_ip"]],
             "syn_count": flow["flag_counts"].get("S", 0),
             "syn_ratio": flow["flag_counts"].get("S", 0) / flow["packet_count"],
+            **connection_features(conn, outbound, now),
+            **self.hosts.features(conn, now),
         }
 
     def cleanup_stale(self, now: float | None = None) -> int:
@@ -94,4 +106,6 @@ class FlowTracker:
         for k in stale:
             self.ip_connection_counts[k[0]] = max(0, self.ip_connection_counts[k[0]] - 1)
             del self.flows[k]
+        self.connections.cleanup(now)
+        self.hosts.cleanup(now)
         return len(stale)

@@ -51,7 +51,7 @@ cd dashboard && npx tsc --noEmit && npm run build
 
 ## Where things live
 
-- **Detection logic:** `detection_engine/`, with flow features in `analysis_service/feature_extractor.py`.
+- **Detection logic:** `detection_engine/`. Features come from `analysis_service/`: `feature_extractor.py` for one-way flows, and `connections.py` for two-way connections and per-host activity over 10- and 60-second windows.
 - **Database schema:** `database/schema.sql`, applied when the Postgres volume is first created. To pick up a schema change locally, `make clean` then `make up` (this deletes stored alerts).
 - **Demo traffic:** `scripts/simulate_attack.py`.
 
