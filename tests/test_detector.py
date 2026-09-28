@@ -83,3 +83,32 @@ class TestDetectionEngine:
         threats = engine.detect(normal_features, packet)
         anomaly_threats = [t for t in threats if t["type"] == "ANOMALY"]
         assert anomaly_threats[0]["confidence"] == 1.0
+
+    def test_anomaly_skipped_for_young_flows(self, packet, normal_features):
+        """3 packets in a few ms read as ~800 pps; the model must not judge that."""
+        engine = self._build_engine(anomaly_detect=True, anomaly_score=-0.8)
+        young = {**normal_features, "total_packets": 3, "flow_duration": 0.004, "packet_rate": 818.0}
+        threats = engine.detect(young, packet)
+        assert [t for t in threats if t["type"] == "ANOMALY"] == []
+        engine.anomaly.detect.assert_not_called()
+
+    def test_model_judges_each_flow_once_per_interval(self, packet, normal_features):
+        """A busy flow gets one judgement per interval, not one per packet."""
+        engine = self._build_engine(anomaly_detect=False)
+        assert engine.judge_interval == 5.0
+        for i in range(50):  # 50 packets over 2.5s on one flow
+            engine.detect(normal_features, {**packet, "timestamp": str(1000.0 + i * 0.05)})
+        assert engine.anomaly.detect.call_count == 1
+
+        engine.detect(normal_features, {**packet, "timestamp": "1005.0"})  # interval passed
+        assert engine.anomaly.detect.call_count == 2
+
+        other = {**packet, "src_ip": "10.9.9.9", "timestamp": "1005.1"}  # a different flow
+        engine.detect(normal_features, other)
+        assert engine.anomaly.detect.call_count == 3
+
+    def test_forget_idle_drops_old_flows(self, packet, normal_features):
+        engine = self._build_engine()
+        engine.detect(normal_features, packet)
+        engine.forget_idle(now=float(packet["timestamp"]) + 301)
+        assert engine._last_judged == {}
