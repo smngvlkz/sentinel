@@ -1,9 +1,12 @@
+import type { Severity } from "./threats";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface Alert {
   id: number;
   timestamp: string;
   threat_type: string;
+  severity: Severity;
   source_ip: string;
   destination_ip: string;
   source_port: string;
@@ -11,6 +14,7 @@ export interface Alert {
   confidence: number;
   detection_source: string;
   features: Record<string, number>;
+  reviewed_at: string | null;
 }
 
 export interface AlertSummary {
@@ -25,33 +29,76 @@ export interface TopIP {
   threat_types: string[];
 }
 
-export interface LiveTraffic {
-  stream_length: number;
-  first_entry: [string, Record<string, string>] | null;
-  last_entry: [string, Record<string, string>] | null;
+export interface Stats {
+  window_hours: number;
+  total_alerts: number;
+  unique_sources: number;
+  last_alert_at: string | null;
+  by_severity: Record<Severity, { total: number; unreviewed: number }>;
+  /** The most severe level that still has unreviewed alerts, if any. */
+  attention: { severity: Severity; count: number; latest: Alert } | null;
 }
 
-export async function fetchAlerts(limit = 50, hours = 24): Promise<{ alerts: Alert[]; count: number }> {
-  const res = await fetch(`${API_BASE}/alerts?limit=${limit}&hours=${hours}`, { cache: "no-store" });
+export type ReviewStatus = "all" | "unreviewed" | "reviewed";
+
+export interface Health {
+  status: "ok" | "degraded";
+  version: string;
+  services: {
+    database: { ok: boolean; error?: string };
+    redis: { ok: boolean; error?: string };
+    capture: {
+      state: "live" | "idle" | "never" | "unknown";
+      last_packet_seconds_ago?: number | null;
+    };
+    analyzer: {
+      running: boolean;
+      model_loaded?: boolean;
+      packets_processed?: number;
+    };
+  };
+}
+
+export class ApiError extends Error {}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...init });
+  } catch {
+    throw new ApiError(`Can't reach the API at ${API_BASE}`);
+  }
+  if (!res.ok) throw new ApiError(`${path} returned ${res.status}`);
   return res.json();
 }
 
-export async function fetchAlertSummary(hours = 24): Promise<{ summary: AlertSummary[] }> {
-  const res = await fetch(`${API_BASE}/alerts/summary?hours=${hours}`, { cache: "no-store" });
-  return res.json();
+export const API_URL = API_BASE;
+
+export const fetchHealth = () => request<Health>("/health");
+
+export const fetchStats = (hours: number) => request<Stats>(`/stats?hours=${hours}`);
+
+export function fetchAlerts(
+  hours: number,
+  { severity, status = "all", limit = 100 }: { severity?: Severity; status?: ReviewStatus; limit?: number } = {},
+) {
+  const q = new URLSearchParams({ hours: String(hours), limit: String(limit), status });
+  if (severity) q.set("severity", severity);
+  return request<{ alerts: Alert[]; count: number }>(`/alerts?${q}`);
 }
 
-export async function fetchTopIPs(limit = 10, hours = 24): Promise<{ top_ips: TopIP[] }> {
-  const res = await fetch(`${API_BASE}/top-ips?limit=${limit}&hours=${hours}`, { cache: "no-store" });
-  return res.json();
-}
+export const fetchAlertSummary = (hours: number) =>
+  request<{ summary: AlertSummary[] }>(`/alerts/summary?hours=${hours}`);
 
-export async function fetchLiveTraffic(): Promise<LiveTraffic> {
-  const res = await fetch(`${API_BASE}/traffic/live`, { cache: "no-store" });
-  return res.json();
-}
+export const fetchTopIPs = (hours: number, limit = 8) =>
+  request<{ top_ips: TopIP[] }>(`/top-ips?limit=${limit}&hours=${hours}`);
 
-export async function fetchHealth(): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/health`, { cache: "no-store" });
-  return res.json();
-}
+/** Mark alerts reviewed (or unreviewed) by id, or every match of a filter. */
+export const reviewAlerts = (
+  body: { reviewed?: boolean } & ({ ids: number[] } | { hours: number; severity?: Severity }),
+) =>
+  request<{ updated: number }>("/alerts/review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });

@@ -1,52 +1,164 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Design language after oMLX: a monochrome utility where colour only ever
+ * means status or severity (red, amber, emerald). Threat types are told
+ * apart by icon and name, never by colour.
+ *
+ * Theme: light by default, dark via [data-theme="dark"] on <html>. The
+ * inline script in layout.tsx sets it from the saved choice or the OS.
+ */
 :root {
-  --bg-primary: #0c0c0c;
-  --bg-panel: #111111;
-  --bg-header: #0a0a0a;
-  --border: #1a1a1a;
-  --border-accent: #2a2a2a;
-  --text-primary: #999999;
-  --text-dim: #555555;
-  --text-bright: #cccccc;
-  --green: #00cc66;
-  --red: #cc3333;
-  --amber: #cc9933;
-  --blue: #3377cc;
+  --bg: #ffffff;
+  --bg-2: #f8fafc;
+  --bg-3: #f1f5f9;
+  --fg: #0f172a;
+  --fg-2: #475569;
+  --fg-3: #64748b;
+  --fg-muted: #94a3b8;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --code: #f3f4f6;
+  --link: #2563eb;
+  --accent: #171717;
+  --accent-hover: #262626;
+  --accent-fg: #ffffff;
+
+  --high: #b91c1c;
+  --high-soft: #fef2f2;
+  --high-line: #fecaca;
+  --high-dot: #ef4444;
+  --medium: #b45309;
+  --medium-soft: #fffbeb;
+  --medium-line: #fde68a;
+  --medium-dot: #fbbf24;
+  --low: #475569;
+  --low-soft: #f8fafc;
+  --low-line: #e2e8f0;
+  --low-dot: #94a3b8;
+  --ok: #047857;
+  --ok-soft: #ecfdf5;
+  --ok-line: #a7f3d0;
+  --ok-dot: #34d399;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #1d1d20;
+  --bg-2: #252529;
+  --bg-3: #2d2d32;
+  --fg: #efefef;
+  --fg-2: #a1a1aa;
+  --fg-3: #8b8b94;
+  --fg-muted: #52525b;
+  --line: #3f3f46;
+  --line-strong: #52525b;
+  --code: #27272a;
+  --link: #60a5fa;
+  --accent: #efefef;
+  --accent-hover: #d4d4d8;
+  --accent-fg: #18181b;
+
+  --high: #fca5a5;
+  --high-soft: #3b1d1d;
+  --high-line: #7f1d1d;
+  --medium: #fcd34d;
+  --medium-soft: #3a2c10;
+  --medium-line: #78350f;
+  --low: #a1a1aa;
+  --low-soft: #2d2d32;
+  --low-line: #3f3f46;
+  --low-dot: #71717a;
+  --ok: #6ee7b7;
+  --ok-soft: #12302a;
+  --ok-line: #065f46;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--bg-primary);
-  --color-foreground: var(--text-primary);
-  --font-mono: var(--font-geist-mono);
-}
-
-* {
-  border-color: var(--border);
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-muted: var(--fg-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-code: var(--code);
+  --color-link: var(--link);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-high: var(--high);
+  --color-high-soft: var(--high-soft);
+  --color-high-line: var(--high-line);
+  --color-high-dot: var(--high-dot);
+  --color-medium: var(--medium);
+  --color-medium-soft: var(--medium-soft);
+  --color-medium-line: var(--medium-line);
+  --color-medium-dot: var(--medium-dot);
+  --color-low: var(--low);
+  --color-low-soft: var(--low-soft);
+  --color-low-line: var(--low-line);
+  --color-low-dot: var(--low-dot);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: var(--ok-line);
+  --color-ok-dot: var(--ok-dot);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
 }
 
 body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-mono), "Courier New", monospace;
+  background: var(--bg-2);
+  color: var(--fg);
+  font-family: var(--font-inter), system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: unset;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #0a0a0a;
-}
-::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
-@keyframes blink {
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* One page-load entrance for the main content, nothing else animates in. */
+.fade-in-up {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+@keyframes pulse-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50% { opacity: 0.35; }
+}
+
+.live-dot {
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.drawer-in {
+  animation: drawer-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-up, .live-dot, .drawer-in { animation: none; }
 }

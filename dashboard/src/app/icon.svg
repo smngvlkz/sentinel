@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <style>
+    .mark { stroke: #0f172a; fill: #0f172a; }
+    @media (prefers-color-scheme: dark) { .mark { stroke: #efefef; fill: #efefef; } }
+  </style>
+  <g class="mark" stroke-width="2" stroke-linejoin="round">
+    <polygon points="12,2.75 20.25,7.5 20.25,16.5 12,21.25 3.75,16.5 3.75,7.5" fill="none" />
+    <path d="M12 12 3.75 7.5M12 12l8.25-4.5M12 12v9.25" fill="none" />
+    <g stroke="none">
+      <circle cx="12" cy="2.75" r="1.6" />
+      <circle cx="20.25" cy="7.5" r="1.6" />
+      <circle cx="20.25" cy="16.5" r="1.6" />
+      <circle cx="12" cy="21.25" r="1.6" />
+      <circle cx="3.75" cy="16.5" r="1.6" />
+      <circle cx="3.75" cy="7.5" r="1.6" />
+      <circle cx="12" cy="12" r="2.8" />
+    </g>
+  </g>
+</svg>

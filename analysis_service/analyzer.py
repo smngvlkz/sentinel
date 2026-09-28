@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 import time
 import logging
 
@@ -36,6 +37,11 @@ CONSUMER_GROUP = "analyzers"
 CONSUMER_NAME = f"analyzer-{os.getpid()}"
 CLEANUP_INTERVAL = 60
 RECONNECT_DELAY = 5
+# The dashboard reads this key to show whether the analyzer is running.
+# It expires on its own if the analyzer stops.
+HEARTBEAT_KEY = "sentinel:analyzer:heartbeat"
+HEARTBEAT_INTERVAL = 5
+HEARTBEAT_TTL = 30
 
 
 def connect_redis() -> redis.Redis:
@@ -59,6 +65,22 @@ def ensure_consumer_group(r: redis.Redis) -> None:
             raise
 
 
+def send_heartbeat(r: redis.Redis, started_at: float, processed: int, model_loaded: bool) -> None:
+    try:
+        r.set(
+            HEARTBEAT_KEY,
+            json.dumps({
+                "at": time.time(),
+                "started_at": started_at,
+                "processed": processed,
+                "model_loaded": model_loaded,
+            }),
+            ex=HEARTBEAT_TTL,
+        )
+    except redis.ConnectionError:
+        pass
+
+
 def main() -> None:
     r = connect_redis()
     ensure_consumer_group(r)
@@ -67,8 +89,11 @@ def main() -> None:
     detector = DetectionEngine()
     alerts = AlertManager()
 
-    last_cleanup = time.time()
+    started_at = time.time()
+    last_cleanup = started_at
+    last_heartbeat = 0.0
     processed = 0
+    model_loaded = detector.anomaly.model is not None
 
     log.info("listening on stream:%s as %s", STREAM_NAME, CONSUMER_NAME)
 
@@ -95,8 +120,14 @@ def main() -> None:
                 processed += 1
 
         now = time.time()
+        if now - last_heartbeat > HEARTBEAT_INTERVAL:
+            send_heartbeat(r, started_at, processed, model_loaded)
+            last_heartbeat = now
+
         if now - last_cleanup > CLEANUP_INTERVAL:
             cleaned = tracker.cleanup_stale(now)
+            alerts.prune(now)
+            detector.forget_idle(now)
             if cleaned:
                 log.info("cleaned %d stale flows, total processed: %d", cleaned, processed)
             last_cleanup = now
