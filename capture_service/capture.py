@@ -50,7 +50,9 @@ def parse_packet(packet: Packet) -> dict[str, str] | None:
         return None
 
     entry: dict[str, str] = {
-        "timestamp": str(time.time()),
+        # Capture time from the packet itself, so a replayed recording keeps
+        # its original timing (and so its packet rates).
+        "timestamp": str(float(packet.time)),
         "src_ip": packet[IP].src,
         "dst_ip": packet[IP].dst,
         "protocol": str(packet[IP].proto),

@@ -75,3 +75,12 @@ class TestNonIpPacket:
         assert result["src_port"] == "0"
         assert result["dst_port"] == "0"
         assert result["flags"] == ""
+
+
+class TestTimestamp:
+
+    def test_uses_packet_capture_time(self):
+        """Replayed recordings must keep their original timing."""
+        pkt = IP(src="1.2.3.4", dst="5.6.7.8") / TCP(sport=1, dport=80)
+        pkt.time = 1_500_000_000.25
+        assert parse_packet(pkt)["timestamp"] == "1500000000.25"
