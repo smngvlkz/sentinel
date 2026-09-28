@@ -1,8 +1,8 @@
 """
 Flow-based feature extraction.
 
-Tracks bidirectional network flows and computes statistical features
-used by both the rule engine and the anomaly detection model.
+Tracks one-way flows (source -> destination) and computes statistical
+features used by both the rule engine and the anomaly detection model.
 """
 
 from __future__ import annotations
@@ -20,6 +20,15 @@ class FlowTracker:
             "packet_count": 0,
             "total_bytes": 0,
             "ports_seen": set(),
+            # Ports that received a bare SYN, i.e. a new connection attempt.
+            # Replies from a server land on many ephemeral client ports but
+            # are never bare SYNs, so this is what port-scan detection uses.
+            "syn_ports_seen": set(),
+            # Of those, ports that answered with a SYN-ACK. Scanners mostly
+            # hit closed ports that never answer; legitimate clients opening
+            # many connections (FTP passive mode, for one) get answers.
+            "answered_ports": set(),
+            "ack_count": 0,
             "flag_counts": defaultdict(int),
         })
         self.flow_timeout = flow_timeout
@@ -42,8 +51,19 @@ class FlowTracker:
         flow["total_bytes"] += int(packet["packet_size"])
         flow["ports_seen"].add(packet["dst_port"])
 
-        if packet.get("flags"):
-            flow["flag_counts"][packet["flags"]] += 1
+        flags = packet.get("flags", "")
+        if flags:
+            flow["flag_counts"][flags] += 1
+        if flags == "S":
+            flow["syn_ports_seen"].add(packet["dst_port"])
+        elif "S" in flags and "A" in flags:
+            # A SYN-ACK answers the connection attempt in the reverse flow.
+            # .get(), not [], so a stray SYN-ACK doesn't create a flow.
+            asker = self.flows.get((packet["dst_ip"], packet["src_ip"]))
+            if asker is not None:
+                asker["answered_ports"].add(packet["src_port"])
+        if "A" in flags:
+            flow["ack_count"] += 1
 
         duration = max(now - flow["start_time"], 0.001)
 
@@ -53,6 +73,13 @@ class FlowTracker:
             "avg_packet_size": flow["total_bytes"] / flow["packet_count"],
             "packet_size": int(packet["packet_size"]),
             "unique_dst_ports": len(flow["ports_seen"]),
+            "unique_syn_dst_ports": len(flow["syn_ports_seen"]),
+            "unanswered_syn_ports": len(flow["syn_ports_seen"] - flow["answered_ports"]),
+            # Part of an established TCP connection. Capture hosts merge
+            # these into oversized "packets" (receive offload), so size
+            # checks skip them.
+            "packet_has_ack": 1.0 if "A" in flags else 0.0,
+            "ack_ratio": flow["ack_count"] / flow["packet_count"],
             "flow_duration": duration,
             "total_packets": flow["packet_count"],
             "total_bytes": flow["total_bytes"],

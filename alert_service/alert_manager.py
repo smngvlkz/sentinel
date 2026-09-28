@@ -4,6 +4,11 @@ Alert manager.
 Persists detected threats to PostgreSQL and logs them to stdout.
 If the database is unavailable alerts are still logged so no
 events are silently dropped. Reconnects automatically on failure.
+
+Repeat alerts are rate-limited: once a threat type fires for a
+src -> dst pair, further matches for that pair are suppressed for
+the configured cooldown, so an attack produces one alert per window
+instead of one per packet.
 """
 
 from __future__ import annotations
@@ -16,9 +21,13 @@ import logging
 import psycopg2
 from dotenv import load_dotenv
 
+from detection_engine.config import load_config
+
 load_dotenv()
 
 log = logging.getLogger(__name__)
+
+AlertKey = tuple[str, str, str]
 
 
 class AlertManager:
@@ -32,6 +41,11 @@ class AlertManager:
             "password": os.getenv("POSTGRES_PASSWORD", "changeme"),
         }
         self.conn: psycopg2.extensions.connection | None = None
+        self.cooldown = float(
+            os.getenv("ALERT_COOLDOWN_SECONDS") or load_config()["alerts"]["cooldown_seconds"]
+        )
+        # key -> (time last emitted, matches suppressed since then)
+        self._recent: dict[AlertKey, tuple[float, int]] = {}
         self._connect()
 
     def _connect(self) -> None:
@@ -57,18 +71,41 @@ class AlertManager:
         packet: dict[str, str],
         features: dict[str, float],
     ) -> None:
+        now = float(packet.get("timestamp", time.time()))
         for threat in threats:
-            self._log(threat, packet)
+            key = (str(threat["type"]), packet.get("src_ip", "?"), packet.get("dst_ip", "?"))
+            suppressed = self._suppress(key, now)
+            if suppressed is None:
+                continue
+            self._log(threat, packet, suppressed)
             self._store(threat, packet, features)
 
-    def _log(self, threat: dict[str, object], packet: dict[str, str]) -> None:
+    def _suppress(self, key: AlertKey, now: float) -> int | None:
+        """Return None to drop a repeat alert, else how many were dropped before it."""
+        last = self._recent.get(key)
+        if last is not None and now - last[0] < self.cooldown:
+            self._recent[key] = (last[0], last[1] + 1)
+            return None
+        self._recent[key] = (now, 0)
+        return last[1] if last else 0
+
+    def prune(self, now: float | None = None) -> int:
+        """Forget cooldowns that have expired so the table does not grow unbounded."""
+        now = now or time.time()
+        expired = [k for k, (t, _) in self._recent.items() if now - t >= self.cooldown]
+        for k in expired:
+            del self._recent[k]
+        return len(expired)
+
+    def _log(self, threat: dict[str, object], packet: dict[str, str], suppressed: int = 0) -> None:
         log.warning(
-            "%s src=%s dst=%s conf=%.2f engine=%s",
+            "%s src=%s dst=%s conf=%.2f engine=%s%s",
             threat["type"],
             packet.get("src_ip", "?"),
             packet.get("dst_ip", "?"),
             threat.get("confidence", 0),
             threat.get("source", "?"),
+            f" (+{suppressed} suppressed)" if suppressed else "",
         )
 
     def _store(

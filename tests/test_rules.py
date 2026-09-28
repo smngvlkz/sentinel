@@ -6,12 +6,16 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from detection_engine.config import DEFAULTS
 from detection_engine.rules import RuleEngine
+
+MIN_RATE_PACKETS = DEFAULTS["rate_evidence"]["min_packets"]
+MIN_RATE_DURATION = DEFAULTS["rate_evidence"]["min_duration_seconds"]
 
 
 @pytest.fixture
 def engine():
-    return RuleEngine()
+    return RuleEngine(config=DEFAULTS)
 
 
 class TestSynFloodRule:
@@ -24,8 +28,9 @@ class TestSynFloodRule:
         features = {
             "syn_ratio": 0.5,
             "packet_rate": 100,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "SYN_FLOOD" not in result
@@ -34,8 +39,9 @@ class TestSynFloodRule:
         features = {
             "syn_ratio": 0.95,
             "packet_rate": 10,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "SYN_FLOOD" not in result
@@ -45,8 +51,9 @@ class TestSynFloodRule:
         features = {
             "syn_ratio": 0.8,
             "packet_rate": 100,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "SYN_FLOOD" not in result
@@ -56,8 +63,9 @@ class TestSynFloodRule:
         features = {
             "syn_ratio": 0.95,
             "packet_rate": 50,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "SYN_FLOOD" not in result
@@ -74,12 +82,13 @@ class TestPortScanRule:
         assert "PORT_SCAN" not in result
 
     def test_boundary_exactly_20_ports(self, engine):
-        """unique_dst_ports must be strictly greater than 20."""
+        """unanswered_syn_ports must be strictly greater than 20."""
         features = {
             "syn_ratio": 0.0,
             "packet_rate": 5,
-            "unique_dst_ports": 20,
+            "unanswered_syn_ports": 20,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "PORT_SCAN" not in result
@@ -88,8 +97,9 @@ class TestPortScanRule:
         features = {
             "syn_ratio": 0.0,
             "packet_rate": 5,
-            "unique_dst_ports": 21,
+            "unanswered_syn_ports": 21,
             "packet_size": 64,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "PORT_SCAN" in result
@@ -110,8 +120,9 @@ class TestLargePayloadRule:
         features = {
             "syn_ratio": 0.0,
             "packet_rate": 1,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 10000,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "LARGE_PAYLOAD" not in result
@@ -120,14 +131,32 @@ class TestLargePayloadRule:
         features = {
             "syn_ratio": 0.0,
             "packet_rate": 1,
-            "unique_dst_ports": 1,
+            "unanswered_syn_ports": 1,
             "packet_size": 10001,
+            "packet_has_ack": 0,
         }
         result = engine.evaluate(features)
         assert "LARGE_PAYLOAD" in result
 
 
 class TestHighFrequencyRule:
+
+    @staticmethod
+    def flood(**overrides):
+        """A UDP-style flood: fast, small packets, no TCP ACKs."""
+        features = {
+            "syn_ratio": 0.0,
+            "packet_rate": 1500,
+            "avg_packet_size": 64,
+            "ack_ratio": 0.0,
+            "unanswered_syn_ports": 0,
+            "packet_size": 64,
+            "packet_has_ack": 0,
+            "total_packets": 1500,
+            "flow_duration": 1.0,
+        }
+        features.update(overrides)
+        return features
 
     def test_triggers_on_high_rate(self, engine, high_frequency_features):
         result = engine.evaluate(high_frequency_features)
@@ -137,26 +166,25 @@ class TestHighFrequencyRule:
         result = engine.evaluate(normal_features)
         assert "HIGH_FREQUENCY" not in result
 
-    def test_boundary_exactly_200(self, engine):
-        """packet_rate must be strictly greater than 200."""
-        features = {
-            "syn_ratio": 0.0,
-            "packet_rate": 200,
-            "unique_dst_ports": 1,
-            "packet_size": 64,
-        }
-        result = engine.evaluate(features)
-        assert "HIGH_FREQUENCY" not in result
+    def test_boundary_exactly_1000(self, engine):
+        """packet_rate must be strictly greater than 1000."""
+        assert "HIGH_FREQUENCY" not in engine.evaluate(self.flood(packet_rate=1000))
 
-    def test_201_triggers(self, engine):
-        features = {
-            "syn_ratio": 0.0,
-            "packet_rate": 201,
-            "unique_dst_ports": 1,
-            "packet_size": 64,
-        }
-        result = engine.evaluate(features)
-        assert "HIGH_FREQUENCY" in result
+    def test_1001_triggers(self, engine):
+        assert "HIGH_FREQUENCY" in engine.evaluate(self.flood(packet_rate=1001))
+
+    def test_download_with_large_packets_ignored(self, engine):
+        """A fast download: full-size packets, so not a flood."""
+        features = self.flood(avg_packet_size=1400, packet_size=1500, ack_ratio=1.0)
+        assert "HIGH_FREQUENCY" not in engine.evaluate(features)
+
+    def test_download_ack_stream_ignored(self, engine):
+        """The client side of a download: small but almost all TCP ACKs."""
+        assert "HIGH_FREQUENCY" not in engine.evaluate(self.flood(ack_ratio=0.98))
+
+    def test_boundary_avg_packet_size_300(self, engine):
+        """avg_packet_size must be strictly under 300 bytes."""
+        assert "HIGH_FREQUENCY" not in engine.evaluate(self.flood(avg_packet_size=300))
 
 
 class TestNormalTraffic:
@@ -169,10 +197,69 @@ class TestNormalTraffic:
         """SYN_FLOOD + HIGH_FREQUENCY can fire together."""
         features = {
             "syn_ratio": 0.95,
-            "packet_rate": 300,
-            "unique_dst_ports": 1,
+            "packet_rate": 1500,
+            "avg_packet_size": 60,
+            "ack_ratio": 0.0,
+            "unanswered_syn_ports": 1,
             "packet_size": 64,
+            "packet_has_ack": 0,
+            "total_packets": 1500,
+            "flow_duration": 1.0,
         }
         result = engine.evaluate(features)
         assert "SYN_FLOOD" in result
         assert "HIGH_FREQUENCY" in result
+
+
+class TestRateEvidence:
+    """Rate-based rules must not fire on flows too young to have a real rate."""
+
+    def test_first_syn_of_new_connection_is_clean(self, engine):
+        """One SYN reads as 1000 pps over the 1ms duration floor."""
+        features = {
+            "syn_ratio": 1.0,
+            "packet_rate": 1000.0,
+            "unanswered_syn_ports": 1,
+            "packet_size": 60,
+            "packet_has_ack": 0,
+            "total_packets": 1,
+            "flow_duration": 0.001,
+        }
+        assert engine.evaluate(features) == []
+
+    def test_too_few_packets(self, engine):
+        features = {
+            "syn_ratio": 0.95,
+            "packet_rate": 300,
+            "unanswered_syn_ports": 1,
+            "packet_size": 64,
+            "packet_has_ack": 0,
+            "total_packets": MIN_RATE_PACKETS - 1,
+            "flow_duration": 1.0,
+        }
+        assert engine.evaluate(features) == []
+
+    def test_too_short_duration(self, engine):
+        features = {
+            "syn_ratio": 0.95,
+            "packet_rate": 300,
+            "unanswered_syn_ports": 1,
+            "packet_size": 64,
+            "packet_has_ack": 0,
+            "total_packets": 50,
+            "flow_duration": MIN_RATE_DURATION / 2,
+        }
+        assert engine.evaluate(features) == []
+
+    def test_non_rate_rules_fire_immediately(self, engine):
+        """LARGE_PAYLOAD is per-packet and needs no flow history."""
+        features = {
+            "syn_ratio": 0.0,
+            "packet_rate": 1000.0,
+            "unanswered_syn_ports": 1,
+            "packet_size": 15000,
+            "packet_has_ack": 0,
+            "total_packets": 1,
+            "flow_duration": 0.001,
+        }
+        assert engine.evaluate(features) == ["LARGE_PAYLOAD"]
