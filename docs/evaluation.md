@@ -107,14 +107,18 @@ reports: **for each minute of traffic between two hosts, was there an alert?**
   checking"), never high, and why it's optional.
 - **Every minute of the HTTP flood itself (15:56–16:16) raised an alert.**
   The DDoS minutes counted as missed are elsewhere: scattered minutes hours
-  earlier, each holding 1 to 8 connections labelled DDoS (56 connections in
-  all, against about 45,000 in the flood). They sit well outside the attack
-  window, so they're most likely another labelling quirk, and no volume rule
-  should fire on a handful of connections.
+  earlier, each holding 1 to 8 connections labelled DDoS (56 in all,
+  against about 45,000 in the flood). They come from the attacker's address
+  to the victim's web server, and their pattern (connect, then reset) looks
+  like probing rather than the flood; several coincide with port-scan
+  minutes. So they're real attack traffic, probably filed under the wrong
+  attack name, and missed: at 1 to 8 connections a minute they're far below
+  anything a volume rule can catch.
 - **Small scans slip through.** The port-scan minutes missed held 305 of
-  about 158,900 scan connections, and each probed 5 or fewer different
-  ports: short reconnaissance runs rather than full scans. The port-scan
-  rule needs more than 20 unanswered ports, so these stay below it.
+  about 158,900 scan connections. Each involved one attacker and one target
+  host, probing 5 or fewer ports: short reconnaissance runs rather than full
+  scans. That's below the port-scan rule's 20 ports, and because only one
+  host was targeted, the network-sweep rule doesn't apply either.
 
 **How these settings were chosen:** judging every packet caught the same DDoS
 minutes with nearly twice the false alarms (0.96%), because a busy
