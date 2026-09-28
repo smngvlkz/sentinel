@@ -1,95 +1,114 @@
 """
-Attack traffic simulator for testing.
+Attack traffic simulator.
 
-Generates synthetic network packets and pushes them into the Redis
-stream. Use this to verify the detection pipeline without needing
-root access for real packet capture.
+Pushes synthetic packets into the Redis stream so you can see SentinelAI
+detect threats without root access or real packet capture. `make demo`
+runs this in Docker; you can also run it directly:
 
-Usage:
     python scripts/simulate_attack.py
+
+Background traffic flows constantly. Every minute the simulator replays
+one of each attack against a pretend machine on your network. Attackers
+use the documentation-only ranges 203.0.113.0/24 and 198.51.100.0/24
+(RFC 5737), so demo alerts can never be mistaken for real hosts.
 """
 
 import os
-import time
 import random
+import time
 
 import redis
 from dotenv import load_dotenv
 
 load_dotenv()
 
-r = redis.Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    decode_responses=True,
-)
-
 STREAM = "packet_stream"
 MAXLEN = 100_000
+TICK = 0.1
+CYCLE = 60
+VICTIM = "192.168.1.10"
+
+SYN_FLOOD_SRC = "203.0.113.66"
+PORT_SCAN_SRC = "198.51.100.23"
+LARGE_PAYLOAD_SRC = "203.0.113.140"
+HIGH_FREQ_SRC = "198.51.100.77"
 
 
-def normal_packet():
+def packet(src, dst, dst_port, size, flags="", transport="TCP"):
     return {
         "timestamp": str(time.time()),
-        "src_ip": f"192.168.1.{random.randint(2, 50)}",
-        "dst_ip": f"10.0.0.{random.randint(1, 10)}",
+        "src_ip": src,
+        "dst_ip": dst,
         "src_port": str(random.randint(49152, 65535)),
-        "dst_port": str(random.choice([80, 443, 8080, 3000])),
-        "packet_size": str(random.randint(64, 1500)),
-        "flags": random.choice(["S", "SA", "A", "PA", "FA"]),
-        "protocol": "6",
-        "transport": "TCP",
+        "dst_port": str(dst_port),
+        "packet_size": str(size),
+        "flags": flags,
+        "protocol": "6" if transport == "TCP" else "17",
+        "transport": transport,
     }
 
 
-def syn_flood_packet():
-    return {
-        "timestamp": str(time.time()),
-        "src_ip": "10.99.99.99",
-        "dst_ip": "192.168.1.1",
-        "src_port": str(random.randint(1024, 65535)),
-        "dst_port": "80",
-        "packet_size": str(random.randint(40, 60)),
-        "flags": "S",
-        "protocol": "6",
-        "transport": "TCP",
-    }
+def background():
+    return packet(
+        f"192.168.1.{random.randint(20, 40)}",
+        random.choice(["93.184.216.34", "142.250.72.14", "151.101.1.69"]),
+        random.choice([443, 443, 443, 80, 53]),
+        random.randint(64, 1500),
+        random.choice(["A", "A", "PA", "PA", "S", "FA"]),
+    )
 
 
-def port_scan_packet():
-    return {
-        "timestamp": str(time.time()),
-        "src_ip": "10.88.88.88",
-        "dst_ip": "192.168.1.1",
-        "src_port": str(random.randint(49152, 65535)),
-        "dst_port": str(random.randint(1, 1024)),
-        "packet_size": str(random.randint(40, 80)),
-        "flags": "S",
-        "protocol": "6",
-        "transport": "TCP",
-    }
+def attacks_for(second, scan_port):
+    """Packets to add this tick, based on where we are in the one-minute cycle."""
+    if 0 <= second < 5:
+        return [packet(SYN_FLOOD_SRC, VICTIM, 80, random.randint(40, 60), "S") for _ in range(40)]
+    if 15 <= second < 18:
+        return [packet(PORT_SCAN_SRC, VICTIM, scan_port + i, 60, "S") for i in range(8)]
+    if 30 <= second < 30 + TICK:
+        return [packet(LARGE_PAYLOAD_SRC, VICTIM, 9999, 15_000, transport="UDP")]
+    if 40 <= second < 43:
+        return [packet(HIGH_FREQ_SRC, VICTIM, 53, 128, transport="UDP") for _ in range(150)]
+    return []
+
+
+def connect():
+    host = os.getenv("REDIS_HOST", "localhost")
+    port = int(os.getenv("REDIS_PORT", 6379))
+    while True:
+        try:
+            r = redis.Redis(host=host, port=port, decode_responses=True)
+            r.ping()
+            return r
+        except redis.ConnectionError:
+            print(f"Waiting for Redis at {host}:{port}...", flush=True)
+            time.sleep(2)
 
 
 def main():
-    print("Injecting simulated traffic (Ctrl+C to stop)")
-    count = 0
+    r = connect()
+    print(
+        f"Simulating traffic. Attacks against {VICTIM} repeat every {CYCLE}s.\n"
+        "Open the dashboard to watch them get detected. Ctrl+C to stop.",
+        flush=True,
+    )
+    start = time.time()
+    scan_port = 1
 
     while True:
-        for _ in range(10):
-            r.xadd(STREAM, normal_packet(), maxlen=MAXLEN)
-            count += 1
+        second = (time.time() - start) % CYCLE
+        batch = [background() for _ in range(10)] + attacks_for(second, scan_port)
+        if 15 <= second < 18:
+            scan_port = scan_port + 8 if scan_port < 1000 else 1
 
-        if count % 100 < 30:
-            for _ in range(50):
-                r.xadd(STREAM, syn_flood_packet(), maxlen=MAXLEN)
-                count += 1
+        pipe = r.pipeline()
+        for p in batch:
+            pipe.xadd(STREAM, p, maxlen=MAXLEN, approximate=True)
+        try:
+            pipe.execute()
+        except redis.ConnectionError:
+            r = connect()
 
-        if count % 200 < 10:
-            for _ in range(25):
-                r.xadd(STREAM, port_scan_packet(), maxlen=MAXLEN)
-                count += 1
-
-        time.sleep(0.1)
+        time.sleep(TICK)
 
 
 if __name__ == "__main__":

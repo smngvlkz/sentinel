@@ -7,6 +7,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY analysis_service/ ./analysis_service/
 COPY detection_engine/ ./detection_engine/
 COPY alert_service/ ./alert_service/
-COPY ml-models/saved/ ./ml-models/saved/
+COPY config/ ./config/
+COPY scripts/simulate_attack.py ./scripts/
+# The trained model (if any) is mounted from the host by docker-compose,
+# so retraining only needs a restart, not a rebuild.
+RUN mkdir -p ml-models/saved
 
 CMD ["python", "analysis_service/analyzer.py"]

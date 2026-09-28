@@ -1,8 +1,18 @@
+# Every port is bound to 127.0.0.1: the API has no authentication, so the
+# dashboard is only reachable from this machine. See README "Remote access".
+
+x-db-env: &db-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-sentinel_ai}
+  POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+
 services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -19,12 +29,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sentinel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_ai"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -40,12 +50,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      <<: *db-env
       REDIS_HOST: redis
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-sentinel_ai}
-      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-}
+    volumes:
+      - ../ml-models/saved:/app/ml-models/saved:ro
+      - ../config:/app/config:ro
     restart: unless-stopped
 
   dashboard-api:
@@ -53,29 +63,44 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.dashboard
     ports:
-      - "${DASHBOARD_PORT:-8000}:8000"
+      - "127.0.0.1:${DASHBOARD_PORT:-8000}:8000"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
+      <<: *db-env
       REDIS_HOST: redis
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-sentinel_ai}
-      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # 3000 is the dashboard dev server (make dashboard-dev).
+      CORS_ORIGINS: http://localhost:${DASHBOARD_UI_PORT:-3001},http://127.0.0.1:${DASHBOARD_UI_PORT:-3001},http://localhost:3000
     restart: unless-stopped
 
   dashboard-ui:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dashboard-ui
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${DASHBOARD_PORT:-8000}
     ports:
-      - "${DASHBOARD_UI_PORT:-3001}:3000"
+      - "127.0.0.1:${DASHBOARD_UI_PORT:-3001}:3000"
     depends_on:
       - dashboard-api
+    restart: unless-stopped
+
+  # Fake attack traffic for trying SentinelAI without packet capture.
+  # Started only by `make demo` (docker compose --profile demo up).
+  simulator:
+    profiles: ["demo"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analyzer
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+    command: ["python", "scripts/simulate_attack.py"]
     restart: unless-stopped
 
 volumes:

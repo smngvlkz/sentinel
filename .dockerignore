@@ -8,3 +8,4 @@ dashboard/node_modules
 dashboard/.next
 ml-models/data
 .DS_Store
+ml-models/saved/*.pkl

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. Install with `make install-launchd`, which fills in
+  __SENTINEL_DIR__ and __CAPTURE_INTERFACE__ from your checkout and .env.
+-->
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -7,14 +11,14 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/smangavilakazi/sentinel-ai-ids/.venv/bin/python</string>
-        <string>/Users/smangavilakazi/sentinel-ai-ids/capture_service/capture.py</string>
+        <string>__SENTINEL_DIR__/.venv/bin/python</string>
+        <string>__SENTINEL_DIR__/capture_service/capture.py</string>
     </array>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>CAPTURE_INTERFACE</key>
-        <string>en1</string>
+        <string>__CAPTURE_INTERFACE__</string>
         <key>REDIS_HOST</key>
         <string>localhost</string>
         <key>REDIS_PORT</key>
@@ -22,7 +26,7 @@
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/smangavilakazi/sentinel-ai-ids</string>
+    <string>__SENTINEL_DIR__</string>
 
     <key>RunAtLoad</key>
     <true/>
@@ -31,9 +35,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/smangavilakazi/sentinel-ai-ids/logs/capture.log</string>
+    <string>__SENTINEL_DIR__/logs/capture.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/smangavilakazi/sentinel-ai-ids/logs/capture.error.log</string>
+    <string>__SENTINEL_DIR__/logs/capture.error.log</string>
 </dict>
 </plist>

@@ -7,8 +7,13 @@ venv/
 dist/
 build/
 ml-models/saved/*.pkl
+# Models set aside by renaming, e.g. anomaly_model.pkl.disabled
+ml-models/saved/*.pkl.*
 ml-models/data/
 .DS_Store
 dashboard/node_modules/
 dashboard/.next/
 logs/
+
+# Claude Code conversation exports (/export)
+/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-*.txt
