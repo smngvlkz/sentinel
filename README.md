@@ -1,177 +1,255 @@
 # SentinelAI
 
-Real-time network intrusion detection system with rule-based and ML anomaly detection.
+[![CI](https://github.com/smngvlkz/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/smngvlkz/sentinel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-SentinelAI captures live network traffic, extracts flow-level features, runs them through a detection engine, and surfaces threats on a monitoring dashboard. It is designed to run continuously on a local machine or server.
+A network intrusion detection system for your home or small-office network.
+It watches traffic in real time, spots common attacks such as port scans and
+connection floods, and explains what it found in plain language.
 
-## Dashboard
+![SentinelAI dashboard](docs/SentinelAI.png)
 
-![SentinelAI Dashboard](docs/dashboard.png)
+- **Rule-based detection** for connection (SYN) floods, port scans, traffic bursts and oversized packets.
+- **Optional machine-learning model** (Isolation Forest) that learns your network's normal traffic and flags what doesn't fit.
+- **A dashboard that explains itself.** Every alert says what happened, whether the source is on your network or the internet, and what to do next.
+- **Runs locally.** Your traffic never leaves your machine, and every service listens only on `127.0.0.1`.
 
-## Architecture
+> [!IMPORTANT]
+> **Only monitor networks you own or have explicit permission to monitor.**
+> Capturing other people's traffic without consent is illegal in many countries.
+> SentinelAI is a learning and home-lab tool. It is not a replacement for a
+> professional security product.
 
-```
-Network Interface
-       |
-Packet Capture (Scapy)
-       |
-Redis Stream
-       |
-Traffic Analyzer
-       |
-Detection Engine
-  |          |
-Rules    Isolation Forest
-       |
-PostgreSQL
-       |
-FastAPI ──── Next.js Dashboard
-```
+## Try it in two minutes
 
-**Capture Service** — sniffs raw packets from a network interface using Scapy and publishes metadata to a Redis Stream.
-
-**Analyzer** — consumes the stream, tracks bidirectional flows, and extracts statistical features (packet rate, byte rate, SYN ratio, port diversity, etc).
-
-**Detection Engine** — evaluates features against rule-based signatures (SYN flood, port scan, high frequency, large payload) and an optional Isolation Forest anomaly model.
-
-**Alert Service** — persists detected threats to PostgreSQL and logs them to stdout.
-
-**Dashboard API** — FastAPI server exposing alert data, traffic stats, and top offenders.
-
-**Dashboard UI** — Next.js monitoring interface with live polling.
-
-## Requirements
-
-- Docker and Docker Compose
-- Python 3.12+ (for packet capture)
-- Root/sudo access (for raw socket packet capture)
-
-## Quick Start
+You need [Docker](https://docs.docker.com/get-docker/) and `make`. No root access is needed.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/sentinel-ai-ids.git
-cd sentinel-ai-ids
-
-# Start infrastructure + dashboard
-./scripts/start.sh
-
-# Start packet capture (separate terminal, requires sudo)
-# Replace en0 with your network interface
-sudo python3 capture_service/capture.py
+git clone https://github.com/smngvlkz/sentinel.git
+cd sentinel
+make demo
 ```
 
-The dashboard is available at **http://localhost:3001**.
+Open **http://localhost:3001**. A simulator replays a connection flood, a port
+scan, an oversized packet and a traffic burst every minute, and you'll see
+them detected within seconds. The simulated attackers use the IP ranges
+reserved for documentation (`203.0.113.0/24`, `198.51.100.0/24`), so they can
+never be confused with real hosts.
 
-## Setup
+The bar at the top only asks for attention while there are **unreviewed**
+alerts. Once you've looked at an alert, mark it as reviewed (one at a time
+from its detail panel, or in bulk from the table) and the dashboard settles
+back to calm.
 
-### 1. Configure
+Select any alert to see what it means:
+
+![Alert detail panel](docs/alert-detail.png)
+
+When you're done, stop the fake traffic with `make demo-stop`, or stop
+everything with `make down`.
+
+## Watch your real network
+
+Packet capture reads raw network traffic, so it runs on your machine (not in
+Docker) and needs `sudo`. You'll also need Python 3.12 or newer.
 
 ```bash
-cp .env.example .env
+make setup     # creates .env and a Python virtual environment
 ```
 
-Edit `.env` and set `CAPTURE_INTERFACE` to your network interface:
+Set `CAPTURE_INTERFACE` in `.env` to the interface you want to watch:
 
-| OS    | Command              | Common interfaces       |
-|-------|----------------------|------------------------|
-| macOS | `networksetup -listallhardwareports` | `en0` (Wi-Fi), `en1` (Ethernet) |
-| Linux | `ip link show`       | `eth0`, `wlan0`, `enp3s0` |
+| OS    | Find your interfaces                  | Common names              |
+|-------|---------------------------------------|---------------------------|
+| macOS | `networksetup -listallhardwareports`  | `en0` (Wi-Fi), `en1`      |
+| Linux | `ip link show`                        | `eth0`, `wlan0`, `enp3s0` |
 
-### 2. Start Services
+Then start the services and capture:
 
 ```bash
-# Using Docker Compose
-cd docker && docker compose up -d
-
-# Or using Make
-make up
+make up        # Redis, Postgres, analyzer, API and dashboard
+make capture   # in a second terminal; asks for your password
 ```
 
-This starts Redis, PostgreSQL, the analyzer, the API, and the dashboard.
+If you ran the demo first, the demo alerts stay in the history. Run
+`make clean` first if you want a fresh start.
 
-### 3. Start Packet Capture
+On macOS, `make install-launchd` sets up capture to start automatically at boot.
 
-The capture service needs raw socket access and runs on the host machine:
+## Commands
+
+Run `make` on its own to print this list.
+
+| Command | What it does |
+|---------|--------------|
+| `make demo` | Start everything with simulated attacks (no root needed) |
+| `make demo-stop` | Stop the simulated traffic, leave the dashboard running |
+| `make setup` | First-time setup: `.env` and a Python virtual environment |
+| `make up` | Start Redis, Postgres, analyzer, API and dashboard (rebuilds if code changed) |
+| `make capture` | Capture live packets from `CAPTURE_INTERFACE` (asks for sudo) |
+| `make down` | Stop all services |
+| `make restart` | Restart the analyzer, after editing `config/detection.toml` or training a model |
+| `make status` | Show which services are running |
+| `make logs` | Follow logs from all services |
+| `make build` | Rebuild all images |
+| `make train-collect` | Record normal traffic for the anomaly model (Ctrl+C to stop early) |
+| `make train-model` | Train the anomaly model on the recording |
+| `make install-launchd` | macOS: start capture automatically at boot |
+| `make clean` | Stop everything and **delete all stored alerts** and built images |
+| `make test` | Run the Python tests |
+| `make evaluate` | Check detection quality on a built-in labelled capture |
+| `make lint` | Lint Python and the dashboard |
+| `make dashboard-dev` | Run the dashboard with hot reload on http://localhost:3000 |
+
+## How it works
+
+```
+Network interface
+       │
+Packet capture (Scapy, on the host)
+       │
+Redis stream
+       │
+Analyzer ── tracks each source → destination conversation
+       │
+Detection engine ── rules + optional Isolation Forest model
+       │
+Alert manager ── de-duplicates repeats, stores to PostgreSQL
+       │
+FastAPI ──── Next.js dashboard
+```
+
+| Component | What it does |
+|-----------|--------------|
+| `capture_service/` | Sniffs packets and publishes their headers (never payloads) to a Redis stream. |
+| `analysis_service/` | Groups packets into source → destination flows and computes rates, SYN ratio, port diversity and more. |
+| `detection_engine/` | Checks each flow against the rules in `config/detection.toml` and, if trained, the anomaly model. |
+| `alert_service/` | Logs and stores alerts. Repeats of the same threat for the same pair are suppressed for a cooldown window, so a flood produces one alert instead of thousands. |
+| `dashboard-api/` | Read-only REST API for the dashboard. |
+| `dashboard/` | Next.js dashboard. |
+
+## Detection rules
+
+| Alert | Fires when | Default |
+|-------|------------|---------|
+| Connection flood (`SYN_FLOOD`) | Most packets in a flow are connection requests, arriving fast | > 80% SYN and > 50 packets/s |
+| Port scan (`PORT_SCAN`) | One source tries to connect to many ports on one host that never answer | > 20 ports |
+| Traffic burst (`HIGH_FREQUENCY`) | A flood of small packets outside an established TCP connection | > 1,000 packets/s, average < 300 bytes |
+| Oversized packet (`LARGE_PAYLOAD`) | A packet far larger than any network carries, outside an established TCP connection | > 10,000 bytes |
+| Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
+
+Rate-based rules wait until a flow has at least 10 packets over 0.1 seconds,
+so the first packet of an ordinary connection is never flagged.
+Replies from servers you connect to and FTP data connections never count as
+a port scan, and large downloads never count as a traffic burst or an
+oversized packet. UDP port scans aren't detected yet.
+
+### Tuning
+
+Every threshold lives in [`config/detection.toml`](config/detection.toml).
+Edit it and run `make restart`. Busy networks, such as ones with a file server
+or big backups, usually need higher rate limits. To keep your settings outside
+the repo, point `SENTINEL_CONFIG` at your own copy.
+
+## Accuracy
+
+Measured on the Friday capture of [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html),
+a public dataset of real traffic with labelled attacks (9.9 million packets):
+
+| | Result |
+|---|---|
+| Port-scan connections caught | **99.8%** |
+| Normal connections wrongly flagged by the rules | **0.01%** |
+| DDoS (HTTP flood) minutes caught, rules + anomaly model | 25 of 34 (rules alone: 4) |
+| Botnet traffic caught | None: it looks like ordinary browsing |
+
+The anomaly model's cost is noise: about 0.56% of normal minutes get a
+false "Unusual traffic" alert. Methodology, full results and how to
+reproduce them: [docs/evaluation.md](docs/evaluation.md). `make evaluate`
+runs a built-in self-test as part of CI.
+
+## Train the anomaly model (optional)
+
+Without a model, only the rules run. The model learns what normal traffic
+looks like on your network and flags anything that doesn't fit as
+"Unusual traffic". To train it, capture must be running:
 
 ```bash
-# With a virtual environment
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-sudo .venv/bin/python capture_service/capture.py
-
-# Or directly
-sudo pip install -r requirements.txt
-sudo python3 capture_service/capture.py
+make train-collect   # records up to 1 hour; press Ctrl+C to stop early and keep what's recorded
+make train-model     # trains on the recording (takes seconds)
+make restart         # the analyzer loads the new model
 ```
 
-### 4. Open the Dashboard
+- **Record for at least 20–30 minutes of normal use.** The model flags
+  anything it didn't see during recording, so a short recording means lots of
+  false "Unusual traffic" alerts.
+- **The model judges each connection at most every 5 seconds**, not every
+  packet (`judge_interval_seconds` in `config/detection.toml`). That halved
+  false alarms on CIC-IDS2017 without missing more attacks.
+- **The model only judges conversations with some history** (10 packets over
+  0.1 seconds, the same rule the detection rules use). A brand-new
+  connection's rate is meaningless and used to be the main source of false
+  alarms.
+- **Record during a typical period with no known attacks.** Anything in the
+  recording is learned as normal.
+- **Every connection counts equally.** The recording takes one sample per
+  connection every 5 seconds, so a big download running at the same time
+  doesn't drown out the rest of your traffic.
+- **Each recording replaces the previous one** (`ml-models/data/normal_traffic.json`).
 
-- **Dashboard**: http://localhost:3001
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+To switch the model off, move `ml-models/saved/anomaly_model.pkl` elsewhere
+and run `make restart`. Detection carries on with the rules only.
 
-## Testing Without Root Access
+## Configuration
 
-A traffic simulator is included for testing the detection pipeline without packet capture:
+Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.example).
 
-```bash
-python scripts/simulate_attack.py
-```
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CAPTURE_INTERFACE` | `en0` | Network interface to capture from |
+| `POSTGRES_PASSWORD` | `changeme` | Database password. Change it if anything else can reach your machine. |
+| `DASHBOARD_UI_PORT` | `3001` | Dashboard port |
+| `DASHBOARD_PORT` | `8000` | API port |
+| `ALERT_COOLDOWN_SECONDS` | from `detection.toml` | Overrides the alert de-duplication window |
+| `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
 
-This injects synthetic SYN floods and port scans into the Redis stream.
+### Remote access
 
-## Training the Anomaly Model
+The API has no authentication, so every port is bound to `127.0.0.1`. To view
+the dashboard from another device, use an SSH tunnel
+(`ssh -L 3001:localhost:3001 -L 8000:localhost:8000 your-server`) rather than
+exposing the ports.
 
-The ML model is optional. Without it, only rule-based detection runs.
+## Troubleshooting
 
-To train on your network's baseline traffic:
+| Symptom | Fix |
+|---------|-----|
+| Dashboard says it can't reach the API | Run `make status`. If services aren't running, `make up`. |
+| "Waiting for network traffic" | Capture isn't running. Start it with `make capture`, or run `make demo`. |
+| `make capture` fails with an interface error | `CAPTURE_INTERFACE` in `.env` doesn't match an interface on your machine (see the table above). |
+| Normal activity keeps getting flagged | Raise the relevant threshold in `config/detection.toml`, then `make restart`. |
+| Lots of "Unusual traffic" alerts | The anomaly model was trained on too little traffic. Record for longer with `make train-collect`, then `make train-model` and `make restart`, or switch the model off (see above). |
 
-```bash
-# Step 1: Collect normal traffic (run for at least 30 minutes)
-python ml-models/train_model.py --collect 1800
+## API
 
-# Step 2: Train the model
-python ml-models/train_model.py --train
-```
+The API runs at http://localhost:8000, with interactive docs at `/docs`.
 
-Restart the analyzer after training to load the new model.
+| Endpoint | Returns |
+|----------|---------|
+| `GET /health` | Status of the database, Redis, capture and analyzer |
+| `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
+| `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
+| `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |
+| `GET /alerts/summary?hours=24` | Alert counts by type |
+| `GET /top-ips?hours=24` | Sources with the most alerts |
+| `GET /traffic/live` | Redis stream statistics |
 
-## Detection Rules
+## Contributing
 
-| Rule           | Condition                                    |
-|----------------|----------------------------------------------|
-| SYN_FLOOD      | SYN ratio > 80% and packet rate > 50/s       |
-| PORT_SCAN      | More than 20 unique destination ports in flow |
-| HIGH_FREQUENCY | Packet rate > 200/s                          |
-| LARGE_PAYLOAD  | Single packet > 10,000 bytes                 |
-| ANOMALY        | Isolation Forest outlier (if model trained)   |
-
-## Project Structure
-
-```
-sentinel-ai-ids/
-  capture_service/     Packet sniffing and Redis publishing
-  analysis_service/    Flow tracking and feature extraction
-  detection_engine/    Rule engine and anomaly model
-  alert_service/       Alert storage and logging
-  dashboard-api/       FastAPI REST endpoints
-  dashboard/           Next.js monitoring UI
-  ml-models/           Model training scripts
-  database/            PostgreSQL schema
-  docker/              Dockerfiles and compose config
-  scripts/             Startup and testing utilities
-```
-
-## API Endpoints
-
-| Endpoint          | Description                        |
-|-------------------|------------------------------------|
-| `GET /health`     | Service health check               |
-| `GET /alerts`     | Recent alerts with filtering       |
-| `GET /alerts/summary` | Alert counts grouped by type  |
-| `GET /top-ips`    | Top source IPs by alert count      |
-| `GET /traffic/live` | Redis stream statistics          |
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get a
+development setup running, and [SECURITY.md](SECURITY.md) to report a
+vulnerability privately.
 
 ## License
 
-MIT
+[MIT](LICENSE)

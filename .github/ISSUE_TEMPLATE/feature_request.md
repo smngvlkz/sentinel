@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature or improvement for SentinelAI IDS
+about: Suggest a new feature or improvement for SentinelAI
 title: "[FEATURE] "
 labels: enhancement
 assignees: ""
