@@ -30,11 +30,14 @@ cd sentinel
 make demo
 ```
 
-Open **http://localhost:3001**. A simulator replays a connection flood, a port
-scan, an oversized packet and a traffic burst every minute, and you'll see
-them detected within seconds. The simulated attackers use the IP ranges
-reserved for documentation (`203.0.113.0/24`, `198.51.100.0/24`), so they can
-never be confused with real hosts.
+Open **http://localhost:3001**. A simulator replays seven attacks every
+minute (a connection flood, a port scan, a request flood, a distributed flood,
+a network sweep, an oversized packet and a traffic burst), and you'll see them
+detected within seconds. The simulated attackers on the internet use the IP
+ranges reserved for documentation (`203.0.113.0/24`, `198.51.100.0/24`), so
+they can never be confused with real hosts. The simulated devices on your
+network use `192.168.1.x` addresses, which may overlap with real ones on your
+network, so run the demo on its own rather than alongside real capture.
 
 The bar at the top only asks for attention while there are **unreviewed**
 alerts. Once you've looked at an alert, mark it as reviewed (one at a time

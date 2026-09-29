@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.1.0",
+  version: "0.2.0",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -148,7 +148,7 @@ export const features: Feature[] = [
     tag: "Demo",
     icon: "play",
     title: "See it work in two minutes",
-    body: "make demo replays simulated attacks against a full local install, no root needed. The fake attackers use addresses reserved for documentation, so they can never be mistaken for real ones.",
+    body: "make demo replays seven kinds of simulated attack against a full local install, no root needed. The fake internet attackers use addresses reserved for documentation, so they can't be mistaken for real ones.",
   },
 ];
 

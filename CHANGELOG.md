@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
 ### Added
 
 - Two-way connection tracking (who opened each connection, whether it
@@ -63,7 +65,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 > **Correction:** some accuracy figures in this release's notes were
 > affected by a scoring bug. The corrected numbers are under
-> [Unreleased](#unreleased) above.
+> [0.2.0](#020---2026-09-29) above.
 
 First public release.
 
@@ -77,5 +79,6 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/smngvlkz/sentinel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/smngvlkz/sentinel/releases/tag/v0.1.0
