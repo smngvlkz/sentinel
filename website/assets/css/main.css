@@ -1,0 +1,191 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * The dashboard's design language: monochrome, with colour only for meaning
+ * (red, amber, emerald for severity and status). Tokens are copied from
+ * dashboard/src/app/globals.css; keep the two in step.
+ * Fonts are bundled, so the page makes no requests to font services.
+ */
+:root {
+  --bg: #ffffff;
+  --bg-2: #f8fafc;
+  --bg-3: #f1f5f9;
+  --fg: #0f172a;
+  --fg-2: #475569;
+  --fg-3: #64748b;
+  --fg-muted: #94a3b8;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --code: #f3f4f6;
+  --link: #2563eb;
+  --accent: #171717;
+  --accent-hover: #262626;
+  --accent-fg: #ffffff;
+
+  --high: #b91c1c;
+  --high-soft: #fef2f2;
+  --high-line: #fecaca;
+  --high-dot: #ef4444;
+  --medium: #b45309;
+  --medium-soft: #fffbeb;
+  --medium-line: #fde68a;
+  --medium-dot: #fbbf24;
+  --low: #475569;
+  --low-soft: #f8fafc;
+  --low-line: #e2e8f0;
+  --low-dot: #94a3b8;
+  --ok: #047857;
+  --ok-soft: #ecfdf5;
+  --ok-line: #a7f3d0;
+  --ok-dot: #34d399;
+  --font-inter: "Inter Variable";
+  --font-jetbrains: "JetBrains Mono Variable";
+  --well-bg: #eaeef3;
+  --well-shadow:
+    inset 0 14px 28px -14px rgb(15 23 42 / 0.28),
+    inset 0 3px 6px -2px rgb(15 23 42 / 0.12),
+    inset 0 0 0 1px rgb(15 23 42 / 0.09),
+    0 1px 0 rgb(255 255 255 / 0.9);
+  --well-dot: rgb(15 23 42 / 0.09);
+  --lift: 0 2px 4px rgb(15 23 42 / 0.06), 0 22px 44px -18px rgb(15 23 42 / 0.35);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #1d1d20;
+  --bg-2: #252529;
+  --bg-3: #2d2d32;
+  --fg: #efefef;
+  --fg-2: #a1a1aa;
+  --fg-3: #8b8b94;
+  --fg-muted: #52525b;
+  --line: #3f3f46;
+  --line-strong: #52525b;
+  --code: #27272a;
+  --link: #60a5fa;
+  --accent: #efefef;
+  --accent-hover: #d4d4d8;
+  --accent-fg: #18181b;
+
+  --high: #fca5a5;
+  --high-soft: #3b1d1d;
+  --high-line: #7f1d1d;
+  --medium: #fcd34d;
+  --medium-soft: #3a2c10;
+  --medium-line: #78350f;
+  --low: #a1a1aa;
+  --low-soft: #2d2d32;
+  --low-line: #3f3f46;
+  --low-dot: #71717a;
+  --ok: #6ee7b7;
+  --ok-soft: #12302a;
+  --ok-line: #065f46;
+  --well-bg: #141417;
+  --well-shadow:
+    inset 0 16px 32px -14px rgb(0 0 0 / 0.85),
+    inset 0 3px 8px -2px rgb(0 0 0 / 0.6),
+    inset 0 0 0 1px rgb(0 0 0 / 0.6),
+    0 1px 0 rgb(255 255 255 / 0.06);
+  --well-dot: rgb(255 255 255 / 0.06);
+  --lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 48px -18px rgb(0 0 0 / 0.8);
+  color-scheme: dark;
+}
+
+/*
+ * Three font sizes, no more: small (labels, captions, code), body (all
+ * running text and titles, told apart by weight) and display (headings).
+ * Tailwind's default scale is switched off, so text-sm, text-lg etc. don't
+ * exist and can't creep back in.
+ */
+@theme {
+  --text-*: initial;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.5;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.6;
+  --text-display: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
+  --text-display--line-height: 1.1;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-muted: var(--fg-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-code: var(--code);
+  --color-link: var(--link);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-high: var(--high);
+  --color-high-soft: var(--high-soft);
+  --color-high-line: var(--high-line);
+  --color-high-dot: var(--high-dot);
+  --color-medium: var(--medium);
+  --color-medium-soft: var(--medium-soft);
+  --color-medium-line: var(--medium-line);
+  --color-medium-dot: var(--medium-dot);
+  --color-low: var(--low);
+  --color-low-soft: var(--low-soft);
+  --color-low-line: var(--low-line);
+  --color-low-dot: var(--low-dot);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: var(--ok-line);
+  --color-ok-dot: var(--ok-dot);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/*
+ * A recessed well: the grey sections sit sunken into the page, with a faint
+ * dot grid, and the cards inside them are lifted on top.
+ */
+.well {
+  border-radius: 1.5rem;
+  background-color: var(--well-bg);
+  background-image: radial-gradient(var(--well-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+  box-shadow: var(--well-shadow);
+}
+.lift {
+  box-shadow: var(--lift);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
