@@ -4,7 +4,8 @@ pipeline and report how many attacks were caught and how much normal
 traffic was wrongly flagged.
 
 Usage:
-    python scripts/evaluate.py capture.pcap labels.csv [more.csv ...] [--with-model] [--max-packets N]
+    python scripts/evaluate.py capture.pcap labels.csv [more.csv ...] [--with-model | --train-minutes N]
+                               [--exclude-pair HOST HOST ...] [--max-packets N]
     python scripts/evaluate.py --self-test
 
 Labels are CSV rows with a source IP, destination IP and label, and
@@ -12,15 +13,19 @@ optionally source port, destination port and protocol. Headers are matched
 loosely, so CIC-IDS2017's labelled-flow CSVs work as they are. BENIGN (any
 case) means normal traffic; any other label is an attack.
 
-With ports and protocol, scoring is per connection: a labelled connection
-counts as detected if SentinelAI raised an alert on any of its packets.
-Without them it falls back to per host pair. Either way, direction doesn't
-matter, since labels and alerts may name the two ends in opposite order.
+With ports, protocol, timestamps and durations (CIC-IDS2017 has all four),
+scoring is per labelled flow: a flow counts as detected only if SentinelAI
+alerted on its connection while that flow was happening, because attack
+tools reuse the same connection ports all day. With ports but no times it's
+per connection, and without ports it falls back to per host pair. Either
+way, direction doesn't matter, since labels and alerts may name the two
+ends in opposite order.
 """
 
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import os
 import struct
@@ -64,16 +69,43 @@ def conn_key(proto: str, a: str, a_port: str, b: str, b_port: str) -> Key:
 class Labels:
     by_connection: bool
     keys: dict[Key, str]
+    # With timestamps: every labelled flow as (start, end, label) in UTC seconds,
+    # so an attack is only matched to alerts on its connection *at that time*.
+    # Flood tools reuse source ports all day, so the same connection key can
+    # carry several different attacks hours apart.
+    flows: dict[Key, list[tuple[float, float, str]]] | None = None
 
 
 def _norm(header: str) -> str:
     return header.strip().lower().replace(" ", "_")
 
 
-def load_labels(paths: list[str]) -> Labels:
-    """Key -> BENIGN, or the most common attack label recorded for it."""
+def parse_cic_time(text: str, utc_offset_hours: float) -> float:
+    """
+    CIC-IDS2017 timestamps ("5/7/2017 8:42", day/month/year) to UTC seconds.
+    They're local time on a 12-hour clock without am/pm, covering 8am-6pm,
+    so hours 1-7 are afternoon.
+    """
+    date, clock = text.strip().split(" ")[:2]
+    day, month, year = (int(x) for x in date.split("/"))
+    parts = [int(x) for x in clock.split(":")]
+    hour, minute, second = parts[0], parts[1], parts[2] if len(parts) > 2 else 0
+    if hour < 8:
+        hour += 12
+    return calendar.timegm((year, month, day, hour, minute, second)) - utc_offset_hours * 3600
+
+
+def load_labels(paths: list[str], utc_offset_hours: float = -3.0) -> Labels:
+    """
+    Key -> BENIGN, or the most common attack label recorded for it. If the
+    files have timestamps and durations (CIC-IDS2017 does), also every
+    labelled flow with its time window, which scoring then uses.
+    `utc_offset_hours` is the labels' local time zone (CIC-IDS2017: UTC-3).
+    """
     attacks: dict[Key, Counter[str]] = defaultdict(Counter)
     benign: set[Key] = set()
+    flows: dict[Key, list[tuple[float, float, str]]] = defaultdict(list)
+    timed = True
     by_connection: bool | None = None
     for path in paths:
         with open(path, newline="", encoding="utf-8", errors="replace") as f:
@@ -91,6 +123,8 @@ def load_labels(paths: list[str]) -> Labels:
             if by_connection is not None and has_ports != by_connection:
                 raise SystemExit("labels files disagree: some have port and protocol columns and some don't")
             by_connection = has_ports
+            ts_col, dur_col = cols.get("timestamp"), cols.get("flow_duration")
+            timed = timed and bool(ts_col and dur_col and has_ports)
             for row in reader:
                 if not row.get(src):
                     continue
@@ -101,13 +135,61 @@ def load_labels(paths: list[str]) -> Labels:
                     key = pair_key(row[src].strip(), row[dst].strip())
                 label = row[lab].strip()
                 if label.upper() == BENIGN:
+                    label = BENIGN
                     benign.add(key)
                 else:
                     attacks[key][label] += 1
+                if timed:
+                    try:
+                        start = parse_cic_time(row[ts_col], utc_offset_hours)
+                        duration = max(float(row[dur_col]), 0.0) / 1e6
+                    except (ValueError, IndexError):
+                        continue
+                    # Timestamps have minute precision: the flow began within that minute.
+                    flows[key].append((start, start + 60 + duration, label))
     keys = {k: BENIGN for k in benign}
     # A key with any attack rows is an attack, named by its most common label.
     keys.update({k: counts.most_common(1)[0][0] for k, counts in attacks.items()})
-    return Labels(bool(by_connection), keys)
+    return Labels(bool(by_connection), keys, dict(flows) if timed and flows else None)
+
+
+def hosts_of(key: Key) -> Key:
+    """The host pair a pair or connection key belongs to."""
+    return frozenset(x[0] if isinstance(x, tuple) else x for x in key if not (isinstance(x, tuple) and x[0] == "proto"))
+
+
+def drop_normal_labels(labels: Labels, pairs: set[Key]) -> int:
+    """
+    Stop scoring normal-labelled traffic between these host pairs, for known
+    labelling errors (attack traffic marked normal). Attack labels are kept.
+    Returns how many labels were dropped.
+    """
+    dropped = 0
+    for key in [k for k, v in labels.keys.items() if v == BENIGN and hosts_of(k) in pairs]:
+        del labels.keys[key]
+        dropped += 1
+    if labels.flows:
+        for key in [k for k in labels.flows if hosts_of(k) in pairs]:
+            kept = [f for f in labels.flows[key] if f[2] != BENIGN]
+            dropped += len(labels.flows[key]) - len(kept)
+            if kept:
+                labels.flows[key] = kept
+            else:
+                del labels.flows[key]
+    return dropped
+
+
+def label_at(labels: Labels, key: Key, now: float) -> str | None:
+    """The label of `key` at time `now`: an attack if any labelled attack flow covers it."""
+    if not labels.flows:
+        return labels.keys.get(key)
+    found = None
+    for start, end, label in labels.flows.get(key, ()):
+        if start <= now <= end:
+            if label != BENIGN:
+                return label
+            found = BENIGN
+    return found
 
 
 # ── Reading captures ────────────────────────────────────────────────────
@@ -260,6 +342,12 @@ class Replay:
     # per pair per minute). Filled when labels are passed to replay().
     minute_label: dict[tuple[Key, int], str] = field(default_factory=dict)
     minute_alerts: dict[tuple[Key, int], set[str]] = field(default_factory=lambda: defaultdict(set))
+    # Per connection, the minutes it was seen and the alerts raised in each,
+    # for scoring time-stamped labels.
+    conn_seen_minutes: dict[Key, set[int]] = field(default_factory=lambda: defaultdict(set))
+    conn_alert_minutes: dict[Key, dict[int, set[str]]] = field(
+        default_factory=lambda: defaultdict(lambda: defaultdict(set))
+    )
 
 
 # Model predictions are made in batches: exactly the same answers as the
@@ -352,6 +440,7 @@ def replay(
                 result.by_pair[pair].add("ANOMALY")
                 result.by_connection[conn].add("ANOMALY")
                 result.minute_alerts[minute].add("ANOMALY")
+                result.conn_alert_minutes[conn][minute[1]].add("ANOMALY")
         pending.clear()
 
     for entry in entries:
@@ -376,8 +465,9 @@ def replay(
         result.last_ts = now
 
         minute = (pair, int(now // 60))
+        result.conn_seen_minutes[conn].add(minute[1])
         if labels is not None:
-            label = labels.keys.get(conn if labels.by_connection else pair)
+            label = label_at(labels, conn, now) if labels.by_connection else labels.keys.get(pair)
             if label is not None and result.minute_label.get(minute, BENIGN) == BENIGN:
                 result.minute_label[minute] = label
 
@@ -386,6 +476,7 @@ def replay(
             result.by_pair[pair].update(found)
             result.by_connection[conn].update(found)
             result.minute_alerts[minute].update(found)
+            result.conn_alert_minutes[conn][minute[1]].update(found)
         flow = (entry["src_ip"], entry["dst_ip"])
         due = model_interval <= 0 or now - last_judged.get(flow, float("-inf")) >= model_interval
         if model is not None and due and has_rate_evidence(features, config):
@@ -441,6 +532,8 @@ class Report:
 
 def score(labels: Labels, result: Replay, types: set[str] | None = None) -> Report:
     """Score alerts against labels. `types` limits which alert types count."""
+    if labels.flows:
+        return _score_flows(labels, result, types)
     alerts = result.by_connection if labels.by_connection else result.by_pair
     if types is not None:
         alerts = {k: v & types for k, v in alerts.items() if v & types}
@@ -464,6 +557,36 @@ def score(labels: Labels, result: Replay, types: set[str] | None = None) -> Repo
     unlabelled = sum(1 for key in alerts if key not in labels.keys)
     unit = "connections" if labels.by_connection else "host pairs"
     return Report(unit, {k: (v[0], v[1]) for k, v in by_label.items()}, benign, fps, fp_types, unlabelled, missing)
+
+
+def _score_flows(labels: Labels, result: Replay, types: set[str] | None) -> Report:
+    """Each labelled flow is judged only by alerts on its connection during its own time window."""
+    by_label: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    benign = fps = missing = 0
+    fp_types: Counter[str] = Counter()
+    for key, flows in labels.flows.items():
+        seen = result.conn_seen_minutes.get(key, set())
+        alerted = result.conn_alert_minutes.get(key, {})
+        for start, end, label in flows:
+            window = range(int(start // 60), int(end // 60) + 1)
+            if not any(m in seen for m in window):
+                missing += 1
+                continue
+            found: set[str] = set()
+            for m in window:
+                found |= alerted.get(m, set())
+            if types is not None:
+                found &= types
+            if label == BENIGN:
+                benign += 1
+                if found:
+                    fps += 1
+                    fp_types.update(found)
+            else:
+                by_label[label][0] += 1
+                by_label[label][1] += bool(found)
+    unlabelled = sum(1 for key in result.conn_alert_minutes if key not in labels.flows)
+    return Report("flows", {k: (v[0], v[1]) for k, v in by_label.items()}, benign, fps, fp_types, unlabelled, missing)
 
 
 def score_minutes(result: Replay, types: set[str] | None = None) -> Report:
@@ -681,6 +804,10 @@ def main() -> None:
         help="train a fresh anomaly model on the capture's first N minutes (which must be attack-free) "
              "and score only what comes after",
     )
+    parser.add_argument(
+        "--exclude-pair", nargs=2, action="append", default=[], metavar=("HOST", "HOST"),
+        help="don't score normal-labelled traffic between these two hosts (a known labelling error); repeatable",
+    )
     parser.add_argument("--max-packets", type=int, help="stop after this many packets")
     parser.add_argument("--self-test", action="store_true", help="run on a built-in synthetic capture")
     args = parser.parse_args()
@@ -695,6 +822,9 @@ def main() -> None:
     attacked = sum(v != BENIGN for v in labels.keys.values())
     unit = "connections" if labels.by_connection else "host pairs"
     print(f"Loaded labels for {len(labels.keys):,} {unit} ({attacked:,} attacks).", flush=True)
+    if args.exclude_pair:
+        dropped = drop_normal_labels(labels, {pair_key(a, b) for a, b in args.exclude_pair})
+        print(f"Not scoring {dropped:,} normal labels between {len(args.exclude_pair)} excluded host pairs.", flush=True)
     started = time.time()
     model = cutoff = None
     if args.train_minutes:

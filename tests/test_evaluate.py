@@ -164,3 +164,59 @@ def test_score_can_limit_alert_types():
     result.by_pair[key].update({"PORT_SCAN"})
     assert evaluate.score(labels, result, {"PORT_SCAN"}).detected == 1
     assert evaluate.score(labels, result, {"ANOMALY"}).detected == 0
+
+
+def test_cic_timestamps_are_afternoon_below_8_and_utc_minus_3():
+    # 5 July 2017, 3:30 on CIC's 12-hour clock is 15:30 local, 18:30 UTC.
+    assert evaluate.parse_cic_time("5/7/2017 3:30", -3) == evaluate.calendar.timegm((2017, 7, 5, 18, 30, 0))
+    assert evaluate.parse_cic_time("5/7/2017 9:05", -3) == evaluate.calendar.timegm((2017, 7, 5, 12, 5, 0))
+
+
+TIMED_HEADER = "Flow ID, Source IP, Source Port, Destination IP, Destination Port, Protocol, Timestamp, Flow Duration, Label\n"
+
+
+def test_reused_connection_keys_are_scored_by_time(tmp_path):
+    """
+    Flood tools reuse source ports, so one connection key can carry two
+    attacks hours apart. An alert during the first must not count for the second.
+    """
+    path = tmp_path / "labels.csv"
+    path.write_text(
+        TIMED_HEADER
+        + "x,172.16.0.1,40000,192.168.10.50,80,6,5/7/2017 9:50,1000000,Slowloris\n"
+        + "x,172.16.0.1,40000,192.168.10.50,80,6,5/7/2017 10:30,1000000,Hulk\n"
+    )
+    labels = evaluate.load_labels([str(path)])
+    key = evaluate.conn_key("6", "172.16.0.1", "40000", "192.168.10.50", "80")
+    assert labels.flows is not None and len(labels.flows[key]) == 2
+    slowloris = int(evaluate.parse_cic_time("5/7/2017 9:50", -3) // 60)
+    hulk = int(evaluate.parse_cic_time("5/7/2017 10:30", -3) // 60)
+    assert evaluate.label_at(labels, key, hulk * 60 + 10) == "Hulk"
+
+    result = evaluate.Replay()
+    result.conn_seen_minutes[key].update({slowloris, hulk})
+    result.conn_alert_minutes[key][hulk].add("REQUEST_FLOOD")
+    report = evaluate.score(labels, result)
+    assert report.unit == "flows"
+    assert report.by_label == {"Hulk": (1, 1), "Slowloris": (1, 0)}
+
+
+def test_timed_labels_not_in_capture_are_not_misses(tmp_path):
+    path = tmp_path / "labels.csv"
+    path.write_text(TIMED_HEADER + "x,1.1.1.1,1,2.2.2.2,2,6,5/7/2017 9:50,5,DDoS\n")
+    report = evaluate.score(evaluate.load_labels([str(path)]), evaluate.Replay())
+    assert report.by_label == {} and report.not_in_capture == 1
+
+
+def test_excluded_pairs_drop_only_normal_labels(tmp_path):
+    path = tmp_path / "labels.csv"
+    path.write_text(
+        TIMED_HEADER
+        + "x,172.16.0.1,40000,192.168.10.50,80,6,5/7/2017 9:50,5,DDoS\n"
+        + "x,172.16.0.1,40001,192.168.10.50,80,6,5/7/2017 9:50,5,BENIGN\n"
+        + "x,192.168.10.3,53,192.168.10.9,5000,17,5/7/2017 9:50,5,BENIGN\n"
+    )
+    labels = evaluate.load_labels([str(path)])
+    assert evaluate.drop_normal_labels(labels, {evaluate.pair_key("192.168.10.50", "172.16.0.1")}) == 2
+    assert set(labels.keys.values()) == {"DDoS", "BENIGN"}
+    assert sorted(f[2] for flows in labels.flows.values() for f in flows) == ["BENIGN", "DDoS"]

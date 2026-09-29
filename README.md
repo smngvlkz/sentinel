@@ -9,7 +9,7 @@ connection floods, and explains what it found in plain language.
 
 ![SentinelAI dashboard](docs/SentinelAI.png)
 
-- **Rule-based detection** for connection (SYN) floods, port scans, traffic bursts and oversized packets.
+- **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, plus an optional rule for botnet check-ins.
 - **Optional machine-learning model** (Isolation Forest) that learns your network's normal traffic and flags what doesn't fit.
 - **A dashboard that explains itself.** Every alert says what happened, whether the source is on your network or the internet, and what to do next.
 - **Runs locally.** Your traffic never leaves your machine, and every service listens only on `127.0.0.1`.
@@ -164,20 +164,38 @@ the repo, point `SENTINEL_CONFIG` at your own copy.
 
 ## Accuracy
 
-Measured on the Friday capture of [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html),
-a public dataset of real traffic with labelled attacks (9.9 million packets).
-Some thresholds were tuned on this same day, so treat these as optimistic;
-details in [docs/evaluation.md](docs/evaluation.md):
+Measured on [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html), a
+public dataset of real traffic with labelled attacks. Wednesday (13.7 million
+packets, five denial-of-service attacks) and Monday (11.6 million packets, no
+attacks) were held out: every threshold was frozen before they were
+replayed. Friday (9.9 million packets) was partly tuned on, so treat it as
+optimistic. Details in [docs/evaluation.md](docs/evaluation.md):
 
-| | Result |
-|---|---|
-| Port-scan connections caught | **99.8%** |
-| HTTP flood (DDoS) connections caught | **100%** |
-| Normal connections wrongly flagged by the rules | **0.01%** |
-| Botnet traffic caught | None: it looks like ordinary browsing |
+| | Wednesday (held out) | Monday (held out) | Friday (tuned on) |
+|---|---|---|---|
+| HTTP flood flows caught | **96.7%** (Hulk), 37.8% (GoldenEye) | no attacks | **99.9%** |
+| Slow HTTP attacks caught | **0%** (Slowloris), 46.2% (Slowhttptest) | no attacks | none that day |
+| Port-scan flows caught | none that day | no attacks | **99.7%** |
+| Infected machines flagged by the botnet check-in rule | no botnet that day | no botnet | **5 of 5**, about 45 minutes after they started |
+| Normal flows wrongly flagged, check-in rule aside | **0.005%** | **0.008%** | **0.006%** |
+| Normal machines with at least one false alarm over the day | 7 of 12 (17 alerts) | 9 of 13 (49 alerts) | 5 of 7 (16 alerts) |
 
-The optional anomaly model adds no detection on this capture and costs
-about 0.56% of normal minutes in false "Unusual traffic" alerts.
+Slow attacks, which hold connections open with very little traffic, and
+Heartbleed are missed: no rule looks for them yet.
+
+**The check-in rule is noisy.** On Friday and Wednesday it flagged one
+server that polls a service all day (7 and 8 alerts). On Monday it also
+flagged two workstations that kept reconnecting to dozens of web services
+for hours, most likely web pages refreshing ads and analytics. With the
+polling server, that was 34 of Monday's 49 alerts. Friday is the only botnet
+day in the dataset, so there's no held-out test of how well it catches bots.
+For these reasons the rule is off by default; the numbers above were
+measured with it on.
+
+The optional anomaly model adds little detection (two extra flood minutes
+on Wednesday), and flagged 0.57% of normal minutes on Friday, 0.01% on
+Wednesday and 0.23% on Monday.
+
 Methodology, full results and how to reproduce them:
 [docs/evaluation.md](docs/evaluation.md). `make evaluate` runs a built-in
 self-test as part of CI.
