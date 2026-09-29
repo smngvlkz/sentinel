@@ -12,6 +12,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 
+from .beacons import BeaconTracker
 from .connections import ConnectionTable, HostActivity, connection_features
 
 
@@ -39,6 +40,7 @@ class FlowTracker:
         self.ip_connection_counts: dict[str, int] = defaultdict(int)
         self.connections = ConnectionTable()
         self.hosts = HostActivity()
+        self.beacons = BeaconTracker()
 
     def _flow_key(self, packet: dict[str, str]) -> tuple[str, str]:
         return (packet["src_ip"], packet["dst_ip"])
@@ -76,6 +78,7 @@ class FlowTracker:
         conn, is_new, outbound = self.connections.update(packet)
         if is_new:
             self.hosts.record(conn)
+            self.beacons.record(conn)
 
         return {
             "packet_rate": flow["packet_count"] / duration,
@@ -98,6 +101,7 @@ class FlowTracker:
             "syn_ratio": flow["flag_counts"].get("S", 0) / flow["packet_count"],
             **connection_features(conn, outbound, now),
             **self.hosts.features(conn, now),
+            **self.beacons.features(conn, now),
         }
 
     def cleanup_stale(self, now: float | None = None) -> int:
@@ -108,4 +112,5 @@ class FlowTracker:
             del self.flows[k]
         self.connections.cleanup(now)
         self.hosts.cleanup(now)
+        self.beacons.cleanup(now)
         return len(stale)

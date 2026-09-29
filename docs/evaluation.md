@@ -8,7 +8,9 @@ caught and what was wrongly flagged. The capture has one of each attack,
 plus normal traffic that fooled earlier versions or looks like an attack:
 ordinary browsing, a fast download, a download recorded as merged oversized
 frames, an FTP session, a website replying to many connections at once, a
-busy DNS resolver, and an office server used by many local devices.
+busy DNS resolver, an office server used by many local devices, and
+software polling on a schedule (every 15 minutes, and every 8 seconds for
+ten minutes).
 
 | Attack | Detected |
 |--------|----------|
@@ -19,7 +21,8 @@ busy DNS resolver, and an office server used by many local devices.
 | Request flood | Yes |
 | Distributed flood (80 sources) | Yes, every source |
 | Network sweep (30 devices) | Yes, every target |
-| **Normal traffic wrongly flagged** | **0 of 115 host pairs** |
+| Botnet check-ins (every 101 s for 70 minutes) | Yes |
+| **Normal traffic wrongly flagged** | **0 of 117 host pairs** |
 
 It runs in a few seconds and is part of the test suite, so a change that
 makes detection worse fails CI.

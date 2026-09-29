@@ -25,6 +25,7 @@ class RuleEngine:
             ("REQUEST_FLOOD", self._request_flood),
             ("DISTRIBUTED_FLOOD", self._distributed_flood),
             ("NETWORK_SWEEP", self._network_sweep),
+            ("BEACONING", self._beaconing),
         ]
 
     def evaluate(self, features: dict[str, float]) -> list[str]:
@@ -81,3 +82,12 @@ class RuleEngine:
 
     def _network_sweep(self, f: dict[str, float]) -> bool:
         return f.get("initiator_same_port_local_hosts_60s", 0) > self.config["network_sweep"]["min_local_hosts_60s"]
+
+    def _beaconing(self, f: dict[str, float]) -> bool:
+        c = self.config["beaconing"]
+        if not c.get("enabled", False):
+            return False
+        return (
+            f.get("checkins_last_hour", 0) >= c["min_checkins_per_hour"]
+            and f.get("checkin_slots_last_hour", 0) >= c["min_active_slots"]
+        )

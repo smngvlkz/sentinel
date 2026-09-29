@@ -139,6 +139,7 @@ FastAPI ──── Next.js dashboard
 | Request flood (`REQUEST_FLOOD`) | One source opening completed connections to one service very fast, e.g. an HTTP flood | > 400 in 10 s |
 | Distributed flood (`DISTRIBUTED_FLOOD`) | Many internet hosts connecting to one of your devices at once | > 50 sources in 60 s |
 | Network sweep (`NETWORK_SWEEP`) | One source contacting many devices on your network on the same port | > 20 devices in 60 s |
+| Regular check-ins (`BEACONING`) | A device opening connections to the same internet server throughout the last hour, like malware checking in | **Off by default.** When on: ≥ 30 check-ins in 11 of 12 five-minute slots |
 | Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
 
 Rate-based rules wait until a flow has at least 10 packets over 0.1 seconds,
@@ -146,6 +147,13 @@ so the first packet of an ordinary connection is never flagged.
 Replies from servers you connect to and FTP data connections never count as
 a port scan, and large downloads never count as a traffic burst or an
 oversized packet. UDP port scans aren't detected yet.
+
+The check-in rule is off by default because everyday software checks in the
+same way: on a real laptop over 24 hours it flagged the Cursor editor and the
+Claude apps 50 times, and on a CIC-IDS2017 day with no attacks it flagged two
+workstations all day. It did catch every infected machine in that dataset, so
+turn it on (`enabled = true` under `[beaconing]` in `config/detection.toml`,
+then `make restart`) if you'd rather have noisy alerts than miss a bot.
 
 ### Tuning
 

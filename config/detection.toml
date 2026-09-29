@@ -54,6 +54,26 @@ min_external_sources_60s = 50
 # CIC-IDS2017 peaked at 7 (Windows name lookups).
 min_local_hosts_60s = 20
 
+[beaconing]
+# A device on your network that keeps opening TCP connections to the same
+# internet server and port throughout the last hour, the way malware checks
+# in with its controller. On CIC-IDS2017 this caught all five infected
+# machines within about 45 minutes.
+#
+# Off by default, because ordinary software does the same: on CIC-IDS2017's
+# held-out Monday it flagged two workstations reconnecting to dozens of web
+# services all day, and in 24 hours on a real laptop it flagged the Cursor
+# editor and the Claude apps 50 times. Turn it on if you'd rather have noisy
+# alerts than miss a bot; details in docs/evaluation.md.
+enabled = false
+# Check-ins (connections a few seconds apart count once) in the last hour.
+min_checkins_per_hour = 30
+# Of the hour's twelve 5-minute slots, how many had a check-in.
+min_active_slots = 11
+# It's an ongoing condition, so repeat the alert at most this often per
+# device and server rather than every minute.
+repeat_alert_seconds = 3600
+
 [rate_evidence]
 # Rate-based rules (syn_flood, high_frequency) wait until a flow has this
 # much history. A single packet otherwise reads as 1000 packets/second.

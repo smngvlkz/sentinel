@@ -321,6 +321,8 @@ def replay(
     to the analyzer's judge interval from config; 0 judges every packet.
     """
     config = load_config()
+    # Evaluate every rule, including ones that are off by default.
+    config["beaconing"]["enabled"] = True
     if model_interval is None:
         model_interval = float(config["anomaly"]["judge_interval_seconds"])
     rules = RuleEngine(config)
@@ -627,6 +629,19 @@ def synthetic_capture() -> tuple[list, Labels]:
         server = f"192.0.2.{100 + i}"
         keys[pair_key(resolver, server)] = BENIGN
         add(120 + i * 0.05, IP(src=resolver, dst=server) / UDP(sport=33000 + i, dport=53) / Raw(b"q" * 40))
+
+    # A bot checking in with its controller every 101 s for 70 minutes.
+    bot, controller = "192.168.1.77", "198.51.100.200"
+    keys[pair_key(bot, controller)] = "Beaconing"
+    for i in range(42):
+        add(200 + i * 101, IP(src=bot, dst=controller) / TCP(sport=47000 + i, dport=8080, flags="S"))
+
+    # Normal software that also polls on a schedule: every 15 minutes all
+    # day, and a page refreshing every 8 s for ten minutes.
+    for host, server, every, count in (("192.168.1.78", "192.0.2.90", 900, 8), ("192.168.1.79", "192.0.2.91", 8, 75)):
+        keys[pair_key(host, server)] = BENIGN
+        for i in range(count):
+            add(200 + i * every, IP(src=host, dst=server) / TCP(sport=48000 + i, dport=443, flags="S"))
 
     pkts.sort(key=lambda p: p.time)
     return pkts, Labels(by_connection=False, keys=keys)

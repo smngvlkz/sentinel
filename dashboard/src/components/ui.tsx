@@ -3,6 +3,7 @@ import {
   Network,
   Package,
   Radar,
+  RadioTower,
   ServerCrash,
   ShieldAlert,
   Shuffle,
@@ -110,6 +111,7 @@ const THREAT_ICON: Record<string, LucideIcon> = {
   REQUEST_FLOOD: ServerCrash,
   DISTRIBUTED_FLOOD: Network,
   NETWORK_SWEEP: Waypoints,
+  BEACONING: RadioTower,
 };
 
 /** Monochrome icon for a threat type; shape, not colour, tells types apart. */

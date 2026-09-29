@@ -115,6 +115,20 @@ export const THREATS: Record<string, ThreatInfo> = {
     features: ["initiator_same_port_local_hosts_60s", "initiator_new_conns_60s"],
     crowd: { side: "destination", feature: "initiator_same_port_local_hosts_60s", noun: "devices" },
   },
+  BEACONING: {
+    name: "Regular check-ins",
+    severity: "medium",
+    headline: (src, dst) => `${src} keeps checking in with ${dst}`,
+    what:
+      "One of your devices has been contacting the same internet server every minute or two for the past hour, without a break. Infected devices do this to check in with the attacker's server for instructions. Some legitimate software, like update checkers, sync tools and monitoring agents, polls the same way.",
+    nextSteps: [
+      "Look up who the server belongs to: search the address, or run whois on it. A cloud provider or software vendor you use is reassuring; an unknown host isn't.",
+      "Find which program is making the connections. On a Mac, run lsof -i with the server address; on Windows, Resource Monitor's Network tab lists them.",
+      "If you can't identify it, run a malware scan on the device.",
+      "If it's software you trust, this alert repeats hourly. Everyday apps check in like this, which is why the rule is off by default: set enabled = false under [beaconing] in config/detection.toml to turn it off again.",
+    ],
+    features: ["checkins_last_hour", "checkin_slots_last_hour"],
+  },
 };
 
 export function threatInfo(type: string): ThreatInfo {
@@ -147,6 +161,8 @@ export const FEATURE_LABELS: Record<string, { label: string; format: (v: number)
   responder_new_conns_10s: { label: "New connections to this device in 10 s", format: (v) => v.toLocaleString() },
   initiator_same_port_local_hosts_60s: { label: "Devices contacted on this port in 60 s", format: (v) => v.toLocaleString() },
   initiator_new_conns_60s: { label: "Connections opened in 60 s", format: (v) => v.toLocaleString() },
+  checkins_last_hour: { label: "Check-ins in the last hour", format: (v) => v.toLocaleString() },
+  checkin_slots_last_hour: { label: "Five-minute slots with a check-in", format: (v) => `${v} of 12` },
 };
 
 // The per-flow numbers shown for threats that don't choose their own.

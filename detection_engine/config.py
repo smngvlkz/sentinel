@@ -26,6 +26,8 @@ DEFAULTS: dict[str, dict[str, float]] = {
     "request_flood": {"min_new_connections_10s": 400},
     "distributed_flood": {"min_external_sources_60s": 50},
     "network_sweep": {"min_local_hosts_60s": 20},
+    # Off by default: scheduled software and busy web pages check in the same way (see docs/evaluation.md).
+    "beaconing": {"enabled": False, "min_checkins_per_hour": 30, "min_active_slots": 11, "repeat_alert_seconds": 3600},
     "rate_evidence": {"min_packets": 10, "min_duration_seconds": 0.1},
     "anomaly": {"judge_interval_seconds": 5},
     "alerts": {"cooldown_seconds": 60},
