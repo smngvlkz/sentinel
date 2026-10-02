@@ -52,10 +52,19 @@ class AlertManager:
         try:
             self.conn = psycopg2.connect(**self._dsn)
             self.conn.autocommit = True
+            self._ensure_schema()
             log.info("postgresql connected")
         except psycopg2.OperationalError as e:
             log.warning("postgresql unavailable: %s — alerts will only be logged", e)
             self.conn = None
+
+    def _ensure_schema(self) -> None:
+        """Add columns introduced after the first install; no-op when already present."""
+        if self.conn is None:
+            return
+        with self.conn.cursor() as cur:
+            cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS source_name TEXT")
+            cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS destination_name TEXT")
 
     def _reconnect(self) -> None:
         try:
@@ -70,15 +79,17 @@ class AlertManager:
         threats: list[dict[str, object]],
         packet: dict[str, str],
         features: dict[str, float],
+        names: dict[str, str] | None = None,
     ) -> None:
         now = float(packet.get("timestamp", time.time()))
+        names = names or {}
         for threat in threats:
             cooldown = float(threat.get("cooldown") or self.cooldown)
             suppressed = self._suppress(self._key(threat, packet), now, cooldown)
             if suppressed is None:
                 continue
-            self._log(threat, packet, suppressed)
-            self._store(threat, packet, features)
+            self._log(threat, packet, suppressed, names)
+            self._store(threat, packet, features, names)
 
     @staticmethod
     def _endpoints(threat: dict[str, object], packet: dict[str, str]) -> tuple[str, str, str, str]:
@@ -122,13 +133,24 @@ class AlertManager:
             del self._recent[k]
         return len(expired)
 
-    def _log(self, threat: dict[str, object], packet: dict[str, str], suppressed: int = 0) -> None:
+    def _log(
+        self,
+        threat: dict[str, object],
+        packet: dict[str, str],
+        suppressed: int = 0,
+        names: dict[str, str] | None = None,
+    ) -> None:
         src, dst, _, _ = self._endpoints(threat, packet)
+        names = names or {}
+        src_n = names.get(src)
+        dst_n = names.get(dst)
         log.warning(
-            "%s src=%s dst=%s conf=%.2f engine=%s%s",
+            "%s src=%s%s dst=%s%s conf=%.2f engine=%s%s",
             threat["type"],
             src,
+            f"({src_n})" if src_n else "",
             dst,
+            f"({dst_n})" if dst_n else "",
             threat.get("confidence", 0),
             threat.get("source", "?"),
             f" (+{suppressed} suppressed)" if suppressed else "",
@@ -139,20 +161,22 @@ class AlertManager:
         threat: dict[str, object],
         packet: dict[str, str],
         features: dict[str, float],
+        names: dict[str, str] | None = None,
     ) -> None:
         if self.conn is None:
             self._reconnect()
         if self.conn is None:
             return
         src, dst, sport, dport = self._endpoints(threat, packet)
+        names = names or {}
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO alerts
                        (timestamp, threat_type, source_ip, destination_ip,
                         source_port, destination_port, confidence,
-                        detection_source, features)
-                       VALUES (to_timestamp(%s), %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        detection_source, features, source_name, destination_name)
+                       VALUES (to_timestamp(%s), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         float(packet.get("timestamp", str(time.time()))),
                         threat["type"],
@@ -163,6 +187,8 @@ class AlertManager:
                         threat.get("confidence", 0),
                         threat.get("source", "unknown"),
                         json.dumps(features),
+                        names.get(src),
+                        names.get(dst),
                     ),
                 )
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:

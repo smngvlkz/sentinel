@@ -1,21 +1,132 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Pencil } from "lucide-react";
 import type { Alert } from "@/lib/api";
 import { crowdLabel, DEFAULT_FEATURES, FEATURE_LABELS, threatInfo } from "@/lib/threats";
-import { formatDateTime, timeAgo } from "@/lib/format";
+import { formatDateTime, ipOrigin, timeAgo } from "@/lib/format";
 import { Address, Label, OriginTag, SeverityIndicator, ThreatIcon } from "./ui";
 
 interface Props {
   alert: Alert;
   onClose: () => void;
   onReviewChange: (alert: Alert, reviewed: boolean) => Promise<void>;
+  /** Give a device a friendly name; null removes it. */
+  onNameDevice: (ip: string, name: string | null) => Promise<void>;
   /** Open the next alert waiting for review; absent when there isn't one. */
   onNext?: () => void;
 }
 
-export default function AlertDrawer({ alert, onClose, onReviewChange, onNext }: Props) {
+/**
+ * "Name this device" for addresses on your own network. Names are stored
+ * by IP, so they follow the device as long as its address stays the same.
+ */
+function DeviceNamer({
+  ip,
+  current,
+  onSave,
+}: {
+  ip: string;
+  current: string | null;
+  onSave: (ip: string, name: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(current ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (ipOrigin(ip) !== "local") return null;
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(ip, value.trim() || null);
+      setEditing(false);
+    } catch {
+      setError("Couldn't save the name.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setValue(current ?? "");
+          setEditing(true);
+        }}
+        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-fg-3 transition-colors duration-200 hover:bg-bg-3 hover:text-fg"
+      >
+        <Pencil className="size-3" strokeWidth={2} aria-hidden />
+        {current ? "Rename" : "Name this device"}
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="flex w-full flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <input
+        autoFocus
+        value={value}
+        maxLength={64}
+        placeholder="e.g. Living room TV"
+        aria-label={`Name for ${ip}`}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          // Escape cancels the edit instead of closing the drawer.
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            setEditing(false);
+          }
+        }}
+        className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-2.5 py-1 text-[13px] focus:border-line-strong focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg transition-all duration-200 hover:bg-accent-hover disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-fg-2 transition-colors duration-200 hover:bg-bg-2 hover:text-fg"
+      >
+        Cancel
+      </button>
+      {current && (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            setValue("");
+            onSave(ip, null).then(() => setEditing(false), () => setError("Couldn't remove the name."));
+          }}
+          className="text-xs font-medium text-fg-3 hover:text-fg"
+        >
+          Remove name
+        </button>
+      )}
+      {error && (
+        <p className="w-full text-xs text-high" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+export default function AlertDrawer({ alert, onClose, onReviewChange, onNameDevice, onNext }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reviewed = alert.reviewed_at !== null;
@@ -46,7 +157,9 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNext }: 
       if (e.key === "Escape") onClose();
       if (e.key !== "Tab" || !dialogRef.current) return;
       // Keep keyboard focus inside the dialog while it's open.
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>("button, a[href], [tabindex]:not([tabindex='-1'])");
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        "button, input, a[href], [tabindex]:not([tabindex='-1'])",
+      );
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (e.shiftKey && document.activeElement === first) {
@@ -161,18 +274,39 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNext }: 
           )}
         </div>
 
-        <dl className="mx-6 mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 rounded-xl border border-line bg-bg-2 p-4">
+        <dl className="mx-6 mt-5 grid grid-cols-[auto_1fr] items-start gap-x-4 gap-y-3 rounded-xl border border-line bg-bg-2 p-4">
           <Label as="dt">From</Label>
-          <dd className="flex flex-wrap items-center gap-2">
+          <dd className="flex min-w-0 flex-wrap items-start gap-2">
             {crowd?.side === "source" && <span className="font-medium">{crowd.text}, latest</span>}
-            <Address ip={alert.source_ip} port={alert.source_port} />
+            <Address
+              ip={alert.source_ip}
+              port={alert.source_port}
+              name={alert.source_name}
+              device={alert.source_device}
+            />
             <OriginTag ip={alert.source_ip} />
+            {crowd?.side !== "source" && (
+              <DeviceNamer key={alert.source_ip} ip={alert.source_ip} current={alert.source_device} onSave={onNameDevice} />
+            )}
           </dd>
           <Label as="dt">To</Label>
-          <dd className="flex flex-wrap items-center gap-2">
+          <dd className="flex min-w-0 flex-wrap items-start gap-2">
             {crowd?.side === "destination" && <span className="font-medium">{crowd.text}, latest</span>}
-            <Address ip={alert.destination_ip} port={alert.destination_port} />
+            <Address
+              ip={alert.destination_ip}
+              port={alert.destination_port}
+              name={alert.destination_name}
+              device={alert.destination_device}
+            />
             <OriginTag ip={alert.destination_ip} />
+            {crowd?.side !== "destination" && (
+              <DeviceNamer
+                key={alert.destination_ip}
+                ip={alert.destination_ip}
+                current={alert.destination_device}
+                onSave={onNameDevice}
+              />
+            )}
           </dd>
           <Label as="dt">Caught by</Label>
           <dd className="text-[13px]">

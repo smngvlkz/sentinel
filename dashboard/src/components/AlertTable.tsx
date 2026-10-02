@@ -275,8 +275,13 @@ function Endpoint({ alert, side }: { alert: Alert; side: "source" | "destination
   const crowd = crowdLabel(alert.threat_type, alert.features);
   if (crowd?.side === side) return <span className="text-[13px] font-medium">{crowd.text}</span>;
   return side === "source" ? (
-    <Address ip={alert.source_ip} />
+    <Address ip={alert.source_ip} name={alert.source_name} device={alert.source_device} />
   ) : (
-    <Address ip={alert.destination_ip} port={alert.destination_port} />
+    <Address
+      ip={alert.destination_ip}
+      port={alert.destination_port}
+      name={alert.destination_name}
+      device={alert.destination_device}
+    />
   );
 }

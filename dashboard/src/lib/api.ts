@@ -11,6 +11,12 @@ export interface Alert {
   destination_ip: string;
   source_port: string;
   destination_port: string;
+  /** Hostname learned from DNS/HTTP/TLS, if payload inspection is on. */
+  source_name: string | null;
+  destination_name: string | null;
+  /** Friendly name someone gave this device, e.g. "Living room TV". */
+  source_device: string | null;
+  destination_device: string | null;
   confidence: number;
   detection_source: string;
   features: Record<string, number>;
@@ -25,6 +31,7 @@ export interface AlertSummary {
 
 export interface TopIP {
   source_ip: string;
+  source_device: string | null;
   alert_count: number;
   threat_types: string[];
 }
@@ -92,6 +99,14 @@ export const fetchAlertSummary = (hours: number) =>
 
 export const fetchTopIPs = (hours: number, limit = 8) =>
   request<{ top_ips: TopIP[] }>(`/top-ips?limit=${limit}&hours=${hours}`);
+
+/** Give a device a friendly name; null or "" removes it. */
+export const nameDevice = (ip: string, name: string | null) =>
+  request<{ ip: string; name: string | null }>("/devices/name", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ip, name }),
+  });
 
 /** Mark alerts reviewed (or unreviewed) by id, or every match of a filter. */
 export const reviewAlerts = (

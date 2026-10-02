@@ -6,6 +6,7 @@
 A network intrusion detection system for your home or small-office network.
 It watches traffic in real time, spots common attacks such as port scans and
 connection floods, and explains what it found in plain language.
+Website: [sentinelids.com](https://sentinelids.com).
 
 ![SentinelAI dashboard](docs/SentinelAI.png)
 
@@ -124,7 +125,7 @@ FastAPI ──── Next.js dashboard
 
 | Component | What it does |
 |-----------|--------------|
-| `capture_service/` | Sniffs packets and publishes their headers (never payloads) to a Redis stream. |
+| `capture_service/` | Sniffs packets and publishes their headers (never payloads) to a Redis stream. Optional name context can also learn hostnames from DNS answers, cleartext HTTP `Host` headers and the TLS server name (SNI). |
 | `analysis_service/` | Groups packets into source → destination flows and computes rates, SYN ratio, port diversity and more. |
 | `detection_engine/` | Checks each flow against the rules in `config/detection.toml` and, if trained, the anomaly model. |
 | `alert_service/` | Logs and stores alerts. Repeats of the same threat for the same pair are suppressed for a cooldown window, so a flood produces one alert instead of thousands. |
@@ -164,6 +165,42 @@ Every threshold lives in [`config/detection.toml`](config/detection.toml).
 Edit it and run `make restart`. Busy networks, such as ones with a file server
 or big backups, usually need higher rate limits. To keep your settings outside
 the repo, point `SENTINEL_CONFIG` at your own copy.
+
+### Hostnames on alerts (optional)
+
+By default SentinelAI only sees IP addresses. To show names like
+`api2.cursor.sh` next to an alert IP, turn on optional name context:
+
+1. Set `PAYLOAD_INSPECTION=true` in `.env` and restart capture
+   (`make capture`).
+2. Set `enabled = true` under `[names]` in `config/detection.toml`, then
+   `make restart`.
+
+Capture then learns IP → hostname bindings from DNS answers, cleartext
+HTTP `Host` headers and the server name in a TLS handshake (SNI). Each
+binding remembers which of your devices used the name, so when one CDN
+address serves many sites, an alert shows the site that device was actually
+talking to.
+
+The analyzer keeps these names in memory only (capped, forgotten after 24
+hours, relearned within minutes after a restart) and stores a name **only on
+the alert row** when something fires — not on every packet, and not in a
+standing name table. Names are chosen by whoever sent the traffic, so treat
+them as helpful context, not proof of identity.
+
+Not covered: encrypted DNS (DNS over HTTPS/TLS), QUIC/HTTP3 (the server name
+is inside encrypted packets), and the occasional large TLS handshake split
+over two packets with the name in the second.
+
+### Naming your devices
+
+Open an alert and click **Name this device** next to any address on your
+network, e.g. `192.168.1.20` → `Living room TV`. The name replaces the IP
+everywhere in the dashboard, including older alerts, and a learned hostname
+still shows on hover. Names are stored by IP address in Postgres, so a
+device that gets a new address from your router needs naming again; giving
+important devices a fixed address (a DHCP reservation) avoids that. This
+works without name context turned on.
 
 ## Accuracy
 

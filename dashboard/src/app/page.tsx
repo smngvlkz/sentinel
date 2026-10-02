@@ -18,6 +18,7 @@ import {
   fetchHealth,
   fetchStats,
   fetchTopIPs,
+  nameDevice,
   reviewAlerts,
   type Alert,
   type AlertSummary,
@@ -118,6 +119,18 @@ export default function Dashboard() {
     } finally {
       setMarkingAll(false);
     }
+  };
+
+  const changeDeviceName = async (ip: string, name: string | null) => {
+    await nameDevice(ip, name);
+    setSelected((a) =>
+      a && {
+        ...a,
+        source_device: a.source_ip === ip ? name : a.source_device,
+        destination_device: a.destination_ip === ip ? name : a.destination_device,
+      },
+    );
+    await refresh();
   };
 
   const changeReviewed = async (alert: Alert, reviewed: boolean) => {
@@ -240,6 +253,7 @@ export default function Dashboard() {
           alert={selected}
           onClose={closeDrawer}
           onReviewChange={changeReviewed}
+          onNameDevice={changeDeviceName}
           onNext={nextToReview ? () => setSelected(nextToReview) : undefined}
         />
       )}

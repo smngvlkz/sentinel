@@ -19,6 +19,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
+from analysis_service.names import NameCache
+from detection_engine.config import load_config
 from detection_engine.detector import DetectionEngine
 from alert_service.alert_manager import AlertManager
 
@@ -85,6 +87,18 @@ def main() -> None:
     r = connect_redis()
     ensure_consumer_group(r)
 
+    config = load_config()
+    names_cfg = config["names"]
+    names_enabled = bool(names_cfg.get("enabled"))
+    name_cache = (
+        NameCache(
+            max_entries=int(names_cfg.get("max_entries", 10_000)),
+            ttl_seconds=float(names_cfg.get("ttl_seconds", 86_400)),
+        )
+        if names_enabled
+        else None
+    )
+
     tracker = FlowTracker()
     detector = DetectionEngine()
     alerts = AlertManager()
@@ -95,7 +109,12 @@ def main() -> None:
     processed = 0
     model_loaded = detector.anomaly.model is not None
 
-    log.info("listening on stream:%s as %s", STREAM_NAME, CONSUMER_NAME)
+    log.info(
+        "listening on stream:%s as %s (names=%s)",
+        STREAM_NAME,
+        CONSUMER_NAME,
+        "on" if names_enabled else "off",
+    )
 
     while True:
         try:
@@ -110,11 +129,27 @@ def main() -> None:
 
         for _, entries in messages:
             for msg_id, packet in entries:
+                if name_cache is not None:
+                    name_cache.observe(packet)
+
                 features = tracker.update(packet)
                 threats = detector.detect(features, packet)
 
                 if threats:
-                    alerts.handle(threats, packet, features)
+                    resolved = None
+                    if name_cache is not None:
+                        # Name both ends of every pair the alert might show,
+                        # including multi-host rules that override the
+                        # packet endpoints. Each end is looked up as seen
+                        # from the other, so shared CDN IPs get the right name.
+                        src, dst = packet.get("src_ip", ""), packet.get("dst_ip", "")
+                        pairs = [
+                            (str(t.get("source_ip") or src), str(t.get("destination_ip") or dst))
+                            for t in threats
+                        ]
+                        pairs.append((src, dst))
+                        resolved = name_cache.resolve_pairs(pairs)
+                    alerts.handle(threats, packet, features, resolved)
 
                 r.xack(STREAM_NAME, CONSUMER_GROUP, msg_id)
                 processed += 1
@@ -128,6 +163,8 @@ def main() -> None:
             cleaned = tracker.cleanup_stale(now)
             alerts.prune(now)
             detector.forget_idle(now)
+            if name_cache is not None:
+                name_cache.prune(now)
             if cleaned:
                 log.info("cleaned %d stale flows, total processed: %d", cleaned, processed)
             last_cleanup = now

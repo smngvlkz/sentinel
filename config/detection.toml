@@ -92,3 +92,17 @@ judge_interval_seconds = 5
 # suppressed for this many seconds. The ALERT_COOLDOWN_SECONDS environment
 # variable overrides this.
 cooldown_seconds = 60
+
+[names]
+# Learn hostnames from DNS answers, cleartext HTTP Host headers and the TLS
+# server name (SNI), and attach them to alerts as context (e.g.
+# api2.cursor.sh next to an IP). Kept in memory only.
+# Off by default: names are chosen by whoever sends the traffic, and
+# enabling this means capture peeks at those fields. Also set
+# PAYLOAD_INSPECTION=true in .env and restart capture.
+enabled = false
+# Max name mappings kept in the analyzer's memory. Each learned name takes
+# two: one for the device that used it, one for the address alone.
+max_entries = 10000
+# Forget a mapping this many seconds after last seeing it (24 hours).
+ttl_seconds = 86400

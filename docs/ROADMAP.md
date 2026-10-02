@@ -24,8 +24,9 @@ the risks or open questions. The order matters and is explained as it goes.
   - Capture uses Scapy, which is easy to read but slow; nothing reports
     packets the kernel dropped.
   - The API has no authentication, so everything listens on 127.0.0.1 only.
-  - SentinelAI reads packet headers only. It doesn't see DNS names or HTTP
-    hosts.
+  - SentinelAI reads packet headers only by default. Optional name context
+    can learn hostnames (DNS, HTTP Host, TLS SNI) for alerts, and you can
+    name your own devices; see the README.
 
 ## Part 1: reliable enough to run unattended
 
@@ -43,6 +44,8 @@ retention is added.
   - per-host activity windows
   - beacon check-in series
   - the alert manager's recent-alert map
+  - the hostname cache (`NameCache`, when name context is on). It's already
+    capped and LRU; it needs only the `/health` metrics below.
 - An eviction policy:
   - Evict the least recently seen entry first, in constant time (an ordered
     dict), instead of scanning everything every minute.
@@ -94,7 +97,8 @@ This already went wrong once, and it's cheap to fix.
 - One admin password, set on first run (hashed with argon2), and a session
   cookie.
 - Keep the existing guard against cross-site requests on every endpoint
-  that changes data.
+  that changes data. Today that's marking alerts reviewed and naming
+  devices (`POST /devices/name`); both need the session too.
 - Rate-limit login attempts.
 - A documented way to reach the dashboard from other devices:
   - a reverse proxy with TLS, or
@@ -249,6 +253,9 @@ alarm is 5 of 7, 7 of 12 and 9 of 13 with the check-in rule, and 4 of 7,
   80 sources is one notification.
 - A "send a test notification" button.
 - Every notification links to the alert in the dashboard.
+- Use device names and hostnames where known ("Living room TV is being
+  scanned", not "192.168.1.20 is being scanned"). Show the IP next to a
+  learned hostname, because whoever sent the traffic chose that name.
 
 **Done when**
 - A simulated attack from `make demo` reaches a phone within a minute.
@@ -258,7 +265,9 @@ alarm is 5 of 7, 7 of 12 and 9 of 13 with the check-in rule, and 4 of 7,
 
 **Risks and open questions**
 - Notifications send device IPs and alert details to a third party (email
-  provider, Discord). Say so in the setup, and default to self-hosted ntfy.
+  provider, Discord). Device names and hostnames make that worse, e.g.
+  "Alex's laptop" or which sites a device visits. Say so in the setup,
+  default to self-hosted ntfy, and offer an option to send IPs only.
 - Should a notification include the AI triage verdict once Part 2 exists?
   Only as extra text. The decision to notify must never depend on it
   (see 2.1).
@@ -380,21 +389,22 @@ triaged" fallback is for.
   input changes a verdict it shouldn't.
 - The dashboard is shown to escape a hostile reason.
 
-**Pushback: today there are no DNS names or HTTP hosts to inject through.**
-SentinelAI only reads packet headers, so the model would see IP addresses,
-ports, counts and rule names, which are hard to inject through. Hostile
-text arrives only if one of these is added:
-- **Payload inspection** (not built; if it's ever added, it would be
-  optional and off by default): DNS query names and HTTP `Host` headers,
-  chosen by whoever sends the traffic.
-- **Enrichment**, such as reverse DNS lookups to turn IPs into names.
-  Reverse DNS names are set by whoever owns the IP address, i.e. possibly
-  the attacker.
+**Names are the injection path.** By default SentinelAI only reads packet
+headers, so the model would see IP addresses, ports, counts and rule names,
+which are hard to inject through. Hostile text arrives through:
+- **Optional name context** (built, off by default): hostnames from DNS
+  answers, HTTP `Host` headers and TLS SNI, all chosen by whoever sends the
+  traffic. Sanitised to printable ASCII, and SNI to hostname characters, but
+  a hostname can still spell out words.
+- **Device names** (built): typed by the user, so trusted, but still passed
+  as data, never as instructions.
+- **Enrichment**, such as reverse DNS lookups (not built). Reverse DNS names
+  are set by whoever owns the IP address, i.e. possibly the attacker.
 
-Names would help triage a lot: knowing the server behind the check-in
-rule's false alarm belongs to an update service would be most of the
-answer. So decide first whether triage uses names at all, and if so build
-the injection tests before the name source, not after.
+Names help triage a lot: knowing the server behind the check-in rule's false
+alarm belongs to an update service would be most of the answer. So if triage
+uses learned hostnames, the injection tests must cover them before triage
+ships.
 
 ### 2.4 Evaluated like the rules
 
@@ -445,7 +455,10 @@ section:
 
 ## Not in this roadmap
 
-- **Payload inspection** stays optional and off by default. It's a privacy
-  trade-off, and it only belongs here if 2.3 decides triage needs names.
+- **Broader payload inspection** (full HTTP parsing, QUIC, etc.). A
+  narrow, optional form already ships: DNS answers, cleartext HTTP `Host`
+  headers and TLS SNI as alert context only (`[names]` +
+  `PAYLOAD_INSPECTION`).
+  Anything beyond that stays a privacy trade-off and off by default.
 - **Blocking traffic.** SentinelAI detects and explains. Blocking turns a
   false alarm into an outage, and that's a different product.

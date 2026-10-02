@@ -125,11 +125,74 @@ export function ThreatIcon({ type, size = "md" }: { type: string; size?: "sm" | 
   );
 }
 
-export function Address({ ip, port }: { ip: string; port?: string }) {
-  return (
-    <span className="font-mono text-[13px] whitespace-nowrap">
+export function Address({
+  ip,
+  port,
+  name,
+  device,
+  layout = "stack",
+}: {
+  ip: string;
+  port?: string;
+  /** Optional hostname — shown as the primary label when known. */
+  name?: string | null;
+  /** Friendly device name someone set; wins over the learned hostname. */
+  device?: string | null;
+  /**
+   * stack — name above, muted IP below (drawer / table cells).
+   * inline — name then muted IP on one line (tight spots).
+   * banner — "name · ip" for prose in the status strip.
+   */
+  layout?: "stack" | "inline" | "banner";
+}) {
+  const portSuffix =
+    port && port !== "0" ? <span className="text-fg-3">:{port}</span> : null;
+  const label = device || name;
+  // Same type as the alert title ("Unusual traffic"): body size, sans, medium.
+  const hostLabel = (
+    <span className="truncate font-medium leading-tight" title={device && name ? `${name} · ${ip}` : ip}>
+      {label}
+    </span>
+  );
+  const ipLine = (
+    <span className="font-mono text-xs text-fg-3">
       {ip}
-      {port && port !== "0" && <span className="text-fg-3">:{port}</span>}
+      {portSuffix}
+    </span>
+  );
+
+  if (!label) {
+    return (
+      <span className="font-mono text-[13px] whitespace-nowrap">
+        {ip}
+        {portSuffix}
+      </span>
+    );
+  }
+
+  if (layout === "banner") {
+    return (
+      <span className="whitespace-nowrap">
+        <span className="font-medium">{label}</span>
+        <span className="text-fg-3"> · </span>
+        <span className="font-mono text-xs text-fg-3">{ip}</span>
+      </span>
+    );
+  }
+
+  if (layout === "inline") {
+    return (
+      <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5">
+        {hostLabel}
+        {ipLine}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      {hostLabel}
+      {ipLine}
     </span>
   );
 }
