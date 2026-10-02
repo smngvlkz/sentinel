@@ -40,19 +40,26 @@ then `make train-collect` (Ctrl+C to stop early), `make train-model` and
 
 ## Checks
 
-CI runs all of these on every pull request:
+CI runs three checks on every pull request, and all three must pass before
+anything merges into `master`. To run the same things locally:
 
 ```bash
+# Python lint and tests
 make test                       # Python tests
 make evaluate                   # detection quality on a synthetic labelled capture (also run by make test)
 make lint                       # ruff + dashboard eslint
+
+# Dashboard lint and build
 cd dashboard && npx tsc --noEmit && npm run build
+
+# Docker images build from a clean checkout
+make build
 ```
 
 ## Where things live
 
 - **Detection logic:** `detection_engine/`. Features come from `analysis_service/`: `feature_extractor.py` for one-way flows, and `connections.py` for two-way connections and per-host activity over 10- and 60-second windows.
-- **Database schema:** `database/schema.sql`, applied when the Postgres volume is first created. To pick up a schema change locally, `make clean` then `make up` (this deletes stored alerts).
+- **Database schema:** `database/schema.sql`, applied only when the Postgres volume is first created. Existing installs don't re-run it, so a new column or table must also be added with `IF NOT EXISTS` where the services start (`AlertManager._ensure_schema` in `alert_service/alert_manager.py`, and `_get_pool` in `dashboard-api/main.py`). Upgrades then keep their alerts. Proper migrations are planned in [roadmap 1.2](docs/ROADMAP.md).
 - **Demo traffic:** `scripts/simulate_attack.py`.
 
 ### Adding a detection rule
@@ -69,7 +76,7 @@ A new threat type touches several places. Miss one and it shows up unlabelled or
 
 ## Pull requests
 
-1. Fork the repo and branch from `master`.
+1. Fork the repo and branch from `master`. `master` is protected: changes land only through pull requests.
 2. Keep each pull request to one change, with tests for new behaviour.
 3. Make sure the checks above pass.
 4. Open the pull request against `master` and fill in the template.
