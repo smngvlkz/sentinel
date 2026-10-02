@@ -3,11 +3,12 @@ Dashboard REST API.
 
 Serves alert data, traffic statistics, and system health to the
 monitoring dashboard over HTTP, and lets the dashboard mark alerts as
-reviewed.
+reviewed and give devices friendly names.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -17,7 +18,7 @@ from typing import Any, Generator, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
@@ -85,6 +86,21 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     if _db_pool is None or _db_pool.closed:
         _db_pool = psycopg2.pool.ThreadedConnectionPool(minconn=2, maxconn=10, **_DB_DSN)
         log.info("postgresql connection pool created")
+        # Columns added after the first install (schema.sql only runs on a fresh volume).
+        conn = _db_pool.getconn()
+        try:
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS source_name TEXT")
+                cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS destination_name TEXT")
+                cur.execute(
+                    """CREATE TABLE IF NOT EXISTS device_names (
+                           ip TEXT PRIMARY KEY,
+                           name TEXT NOT NULL,
+                           updated_at TIMESTAMPTZ DEFAULT NOW())"""
+                )
+        finally:
+            _db_pool.putconn(conn)
     return _db_pool
 
 
@@ -120,6 +136,15 @@ def severity_sql() -> tuple[str, list[Any]]:
         "CASE WHEN threat_type = ANY(%s) THEN 'high' WHEN threat_type = ANY(%s) THEN 'medium' ELSE 'low' END",
         [_types_with("high"), _types_with("medium")],
     )
+
+
+def alert_select(sev_expr: str) -> str:
+    """SELECT … FROM for alert rows, with each end's friendly device name if one is set."""
+    return f"""SELECT alerts.*, sd.name AS source_device, dd.name AS destination_device,
+                      {sev_expr} AS severity
+               FROM alerts
+               LEFT JOIN device_names sd ON sd.ip = alerts.source_ip
+               LEFT JOIN device_names dd ON dd.ip = alerts.destination_ip"""
 
 
 def alert_filter(
@@ -247,7 +272,7 @@ def stats(hours: int = Query(24, ge=1, le=168)) -> dict[str, Any]:
             if worst:
                 w_where, w_params = alert_filter(hours, worst, "unreviewed")
                 cur.execute(
-                    f"SELECT *, {sev_expr} AS severity FROM alerts WHERE {w_where} ORDER BY timestamp DESC LIMIT 1",
+                    f"{alert_select(sev_expr)} WHERE {w_where} ORDER BY timestamp DESC LIMIT 1",
                     sev_params + w_params,
                 )
                 attention = {
@@ -276,7 +301,7 @@ def get_alerts(
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                f"SELECT *, {sev_expr} AS severity FROM alerts WHERE {where} ORDER BY timestamp DESC LIMIT %s",
+                f"{alert_select(sev_expr)} WHERE {where} ORDER BY timestamp DESC LIMIT %s",
                 sev_params + params + [limit],
             )
             rows = cur.fetchall()
@@ -315,6 +340,58 @@ def review_alerts(body: ReviewRequest) -> dict[str, int]:
     return {"updated": updated}
 
 
+MAX_DEVICE_NAME = 64
+
+
+class DeviceNameRequest(BaseModel):
+    """Name a device by IP. An empty or missing name removes it."""
+
+    ip: str
+    name: str | None = None
+
+    @field_validator("ip")
+    @classmethod
+    def valid_ip(cls, v: str) -> str:
+        try:
+            # Normalised so "::FFFF:1" and "::ffff:1" are the same device.
+            return str(ipaddress.ip_address(v.strip()))
+        except ValueError:
+            raise ValueError("not an IP address") from None
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = " ".join("".join(c for c in v if c.isprintable()).split())
+        if len(cleaned) > MAX_DEVICE_NAME:
+            raise ValueError(f"name must be {MAX_DEVICE_NAME} characters or fewer")
+        return cleaned or None
+
+
+@app.get("/devices")
+def list_devices() -> dict[str, Any]:
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT ip, name, updated_at FROM device_names ORDER BY name")
+            rows = cur.fetchall()
+    return {"devices": rows}
+
+
+@app.post("/devices/name", dependencies=[Depends(require_trusted_request)])
+def name_device(body: DeviceNameRequest) -> dict[str, Any]:
+    with get_db() as conn, conn.cursor() as cur:
+        if body.name is None:
+            cur.execute("DELETE FROM device_names WHERE ip = %s", [body.ip])
+        else:
+            cur.execute(
+                """INSERT INTO device_names (ip, name) VALUES (%s, %s)
+                   ON CONFLICT (ip) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()""",
+                [body.ip, body.name],
+            )
+    return {"ip": body.ip, "name": body.name}
+
+
 @app.get("/alerts/summary")
 def alert_summary(hours: int = Query(24, ge=1, le=168)) -> dict[str, Any]:
     with get_db() as conn:
@@ -337,9 +414,10 @@ def top_ips(
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """SELECT source_ip, COUNT(*) as alert_count,
+                """SELECT source_ip, MAX(d.name) AS source_device, COUNT(*) as alert_count,
                           ARRAY_AGG(DISTINCT threat_type) as threat_types
-                   FROM alerts WHERE timestamp > NOW() - make_interval(hours => %s)
+                   FROM alerts LEFT JOIN device_names d ON d.ip = alerts.source_ip
+                   WHERE timestamp > NOW() - make_interval(hours => %s)
                    GROUP BY source_ip ORDER BY alert_count DESC LIMIT %s""",
                 [hours, limit],
             )

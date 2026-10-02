@@ -167,7 +167,7 @@ class TestFullPipeline:
             pkt = {
                 "timestamp": str(1000.0 + i * 0.05),
                 "src_ip": "104.16.7.34",
-                "dst_ip": "192.168.18.134",
+                "dst_ip": "192.168.1.50",
                 "protocol": "6",
                 "packet_size": "1200",
                 "src_port": "443",
@@ -184,7 +184,7 @@ class TestFullPipeline:
         for i in range(3000):
             pkt = {
                 "timestamp": str(1000.0 + i * 0.0003),
-                "src_ip": "192.168.18.134",
+                "src_ip": "192.168.1.50",
                 "dst_ip": "17.248.151.130",
                 "protocol": "6",
                 "packet_size": "66",

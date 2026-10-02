@@ -31,6 +31,9 @@ DEFAULTS: dict[str, dict[str, float]] = {
     "rate_evidence": {"min_packets": 10, "min_duration_seconds": 0.1},
     "anomaly": {"judge_interval_seconds": 5},
     "alerts": {"cooldown_seconds": 60},
+    # Off by default: learning DNS/HTTP names is a privacy trade-off. Also set
+    # PAYLOAD_INSPECTION=true so capture extracts the bindings.
+    "names": {"enabled": False, "max_entries": 10_000, "ttl_seconds": 86_400},
 }
 
 

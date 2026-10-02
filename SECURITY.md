@@ -30,8 +30,12 @@ Things to know before deploying:
   requests.** It rejects any browser `Origin` not in `CORS_ORIGINS` and any
   body that isn't JSON, so a web page you visit can't mark your alerts as
   reviewed behind your back.
-- **Packet capture runs as root** because it reads raw sockets. It only parses
-  packet headers and never stores payloads.
+- **Packet capture runs as root** because it reads raw sockets. By default it
+  only parses packet headers and never stores payloads. Optional name
+  context (`PAYLOAD_INSPECTION` plus `[names]` in config) additionally reads
+  DNS answers, cleartext HTTP `Host` headers and the TLS server name (SNI)
+  in memory so alerts can show a hostname next to an IP; those names are
+  stored on alerts only, and names are chosen by whoever sent the traffic.
 - **The anomaly model is loaded with `joblib`**, which can execute code. Only
   load model files you trained yourself.
 - **The default database password is `changeme`.** Set `POSTGRES_PASSWORD`

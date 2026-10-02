@@ -6,6 +6,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional hostname context on alerts: when enabled, capture learns IP →
+  name bindings from DNS answers, cleartext HTTP `Host` headers and the TLS
+  server name (SNI), and the analyzer attaches those names to alert rows only
+  (shown in the dashboard next to the IP). Names are remembered per device,
+  so shared CDN addresses show the site that device used. Memory only, off
+  by default; see `[names]` in `config/detection.toml` and
+  `PAYLOAD_INSPECTION` in `.env`.
+- Name your own devices from the alert drawer ("Name this device"), e.g.
+  `192.168.1.20` → Living room TV. Names are stored by IP in a new
+  `device_names` table and shown everywhere in place of the IP, including on
+  older alerts. New API endpoints: `GET /devices`, `POST /devices/name`.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added

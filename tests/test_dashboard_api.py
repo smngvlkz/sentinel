@@ -96,6 +96,35 @@ class TestMutationGuard:
         assert e.value.status_code == 415
 
 
+class TestDeviceNameRequest:
+
+    def test_normalises_ip_and_name(self):
+        body = api.DeviceNameRequest(ip=" 192.168.1.50 ", name="  Alex's   laptop\n")
+        assert body.ip == "192.168.1.50"
+        assert body.name == "Alex's laptop"
+
+    def test_ipv6_normalised(self):
+        assert api.DeviceNameRequest(ip="FE80::1", name="Pi").ip == "fe80::1"
+
+    def test_blank_name_means_remove(self):
+        assert api.DeviceNameRequest(ip="10.0.0.1", name="   ").name is None
+        assert api.DeviceNameRequest(ip="10.0.0.1").name is None
+
+    def test_rejects_bad_ip(self):
+        with pytest.raises(ValueError):
+            api.DeviceNameRequest(ip="not-an-ip", name="x")
+
+    def test_rejects_long_name(self):
+        with pytest.raises(ValueError):
+            api.DeviceNameRequest(ip="10.0.0.1", name="x" * 65)
+
+
+def test_alert_select_joins_device_names():
+    sql = api.alert_select("'low'")
+    assert "LEFT JOIN device_names sd ON sd.ip = alerts.source_ip" in sql
+    assert "LEFT JOIN device_names dd ON dd.ip = alerts.destination_ip" in sql
+
+
 def test_api_and_dashboard_agree_on_severity():
     """The API filters and counts by severity; the dashboard labels by it. They must match."""
     import re

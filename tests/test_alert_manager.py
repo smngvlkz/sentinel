@@ -109,3 +109,21 @@ class TestMultiHostGrouping:
                   "source_ip": "172.16.0.1", "destination_ip": "192.168.10.50"}
         reply = _packet(1000.0, src="192.168.10.50", dst="172.16.0.1")
         assert manager._endpoints(threat, reply)[:2] == ("172.16.0.1", "192.168.10.50")
+
+
+class TestAlertNames:
+    """Hostnames are context on the alert only; missing names stay None."""
+
+    def test_names_passed_to_store(self, manager):
+        manager.handle(
+            [SYN_FLOOD],
+            _packet(1000.0, src="10.0.0.1", dst="1.2.3.4"),
+            {},
+            names={"1.2.3.4": "api.example.com"},
+        )
+        assert manager.store.call_count == 1
+        assert manager.store.call_args.args[3] == {"1.2.3.4": "api.example.com"}
+
+    def test_without_names_still_stores(self, manager):
+        manager.handle([SYN_FLOOD], _packet(1000.0), {})
+        assert manager.store.call_args.args[3] == {}

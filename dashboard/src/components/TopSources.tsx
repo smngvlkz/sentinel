@@ -11,7 +11,7 @@ export default function TopSources({ data }: { data: TopIP[] }) {
         {data.map((ip) => (
           <li key={ip.source_ip} className="border-b border-line px-5 py-3 last:border-b-0">
             <div className="flex items-center gap-2">
-              <Address ip={ip.source_ip} />
+              <Address ip={ip.source_ip} device={ip.source_device} layout="inline" />
               <OriginTag ip={ip.source_ip} />
               <span className="ml-auto font-mono text-[13px] text-fg-2">{ip.alert_count.toLocaleString()}</span>
             </div>

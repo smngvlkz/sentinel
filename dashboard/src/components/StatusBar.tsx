@@ -81,7 +81,15 @@ export default function StatusBar({ health, stats, hours, now, onReview, childre
     detail = (
       <>
         {ongoing ? "Happening now: " : "Latest: "}
-        {info.name.toLowerCase()} from <Address ip={latest.source_ip} /> to <Address ip={latest.destination_ip} />,{" "}
+        {info.name.toLowerCase()} from{" "}
+        <Address ip={latest.source_ip} name={latest.source_name} device={latest.source_device} layout="banner" /> to{" "}
+        <Address
+          ip={latest.destination_ip}
+          name={latest.destination_name}
+          device={latest.destination_device}
+          layout="banner"
+        />
+        ,{" "}
         {timeAgo(latest.timestamp, now)}.
       </>
     );
