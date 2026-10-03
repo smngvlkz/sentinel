@@ -71,6 +71,33 @@ def ensure_consumer_group(r: redis.Redis) -> None:
             raise
 
 
+# Packets read but unfinished for this long belong to a run that has stopped:
+# a live analyzer finishes each batch within milliseconds.
+STALE_PENDING_MS = 60_000
+
+
+def clear_stale_pending(r: redis.Redis) -> int:
+    """
+    Mark packets that an earlier run read but never finished (it was stopped
+    mid-batch) as done. Redis never hands them to a reader of new packets
+    again, so they'd stay in the group's pending list for good and `pending`
+    on /health would never reach 0. They aren't processed now: they're from
+    before the restart, and the flow state they belonged to is gone.
+    """
+    cleared = 0
+    while True:
+        stale = r.xpending_range(STREAM_NAME, CONSUMER_GROUP, "-", "+", 1000, idle=STALE_PENDING_MS)
+        if not stale:
+            break
+        acked = r.xack(STREAM_NAME, CONSUMER_GROUP, *[entry["message_id"] for entry in stale])
+        cleared += acked
+        if len(stale) < 1000 or not acked:
+            break
+    if cleared:
+        log.info("marked %d packets left unfinished by an earlier run as done", cleared)
+    return cleared
+
+
 def entries_read(r: redis.Redis) -> int:
     """
     Stream entries the consumer group has moved past. Redis counts entries
@@ -131,6 +158,7 @@ def names_enabled(config_value: object, env: str | None) -> bool:
 def main() -> None:
     r = connect_redis()
     ensure_consumer_group(r)
+    clear_stale_pending(r)
 
     config = load_config()
     names_cfg = config["names"]
