@@ -10,37 +10,27 @@ attacker could be doing it on purpose to hide something else.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
-from .feature_extractor import FlowTracker
+from .tables import Tables
 
 THREAT_TYPE = "RESOURCE_PRESSURE"
 # At most one alert this often while the pressure lasts.
 REPEAT_SECONDS = 600.0
+# Learned hostnames age out of their cache on a busy network as a matter of
+# course, and aren't detection state, so that cache filling up isn't pressure.
+NOT_WATCHED = {"names"}
 
 
 class PressureMonitor:
     """Turns eviction counts from every table into at most one alert per `repeat` seconds."""
 
-    def __init__(self, tracker: FlowTracker, extra: dict[str, Callable[[], int]] | None = None,
-                 repeat: float = REPEAT_SECONDS) -> None:
-        self.tracker = tracker
-        # Tables outside the tracker (the detector's, the alert manager's).
-        self.extra = extra or {}
+    def __init__(self, tables: Tables, repeat: float = REPEAT_SECONDS) -> None:
+        self.tables = tables
         self.repeat = repeat
         self.last_counts = self.counts()
         self.last_alert: float | None = None
 
     def counts(self) -> dict[str, int]:
-        t = self.tracker
-        counts = {
-            "flows": t.evicted,
-            "connections": t.connections.evicted,
-            **t.hosts.evicted,
-            "beacon_series": t.beacons.evicted,
-        }
-        counts.update({name: read() for name, read in self.extra.items()})
-        return counts
+        return {name: row[2] for name, row in self.tables.snapshot().items() if name not in NOT_WATCHED}
 
     def check(self, now: float) -> tuple[dict, dict[str, str], dict[str, float]] | None:
         """
@@ -56,7 +46,7 @@ class PressureMonitor:
             return None
         self.last_alert = now
 
-        busiest, peers, latest_peer = self.tracker.hosts.busiest(now)
+        busiest, peers, latest_peer = self.tables.tracker.hosts.busiest(now)
         threat = {
             "type": THREAT_TYPE,
             "source": "system",

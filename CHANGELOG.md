@@ -25,6 +25,11 @@ uses [Semantic Versioning](https://semver.org/).
 - A "Memory limit reached" alert (`RESOURCE_PRESSURE`, high severity, at
   most every 10 minutes) when any of those limits is hit, since that takes a
   flood far beyond normal traffic and means detection may be degraded.
+- `/health` reports how well the analyzer is keeping up: its backlog of
+  packets not yet read (`lag`) and in progress (`pending`), packets dropped
+  from the stream before it read them (`packets_lost_unread`), every memory
+  table's size, limit and entries dropped in the last minute (`tables`), and
+  hostnames capture rejected as invalid (`names_dropped_total`).
 - `make stress`: floods the analyzer with 10 million made-up connections and
   a hidden slow scan, and reports memory, pauses and whether the scan was
   caught (`scripts/stress_memory.py`).

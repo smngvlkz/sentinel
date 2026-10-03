@@ -201,16 +201,18 @@ class TestPressureAlert:
 
     def test_quiet_while_nothing_is_dropped(self):
         from analysis_service.pressure import PressureMonitor
+        from analysis_service.tables import Tables
         t = FlowTracker()
-        monitor = PressureMonitor(t)
+        monitor = PressureMonitor(Tables(t))
         self.flood(t, 0.0, 2000)                      # far below every cap
         assert monitor.check(60.0) is None
 
     def test_one_alert_when_a_table_fills_then_rate_limited(self):
         from analysis_service.pressure import PressureMonitor
+        from analysis_service.tables import Tables
         t = FlowTracker(limits={"max_flows": 100, "max_connections": 100, "max_hosts": 100,
                                 "max_services": 100, "max_sweeps": 100})
-        monitor = PressureMonitor(t, {"judged_flows": lambda: 0}, repeat=600)
+        monitor = PressureMonitor(Tables(t), repeat=600)
         self.flood(t, 0.0, 1000)
         threat, packet, features = monitor.check(1.0)
         assert threat["type"] == "RESOURCE_PRESSURE" and threat["group"] == "all"
