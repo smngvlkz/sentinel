@@ -90,6 +90,32 @@ class TestHostActivity:
             f = tracker.update(pkt(i * 0.01, f"203.0.113.{i % 100}", 30000 + i, "192.168.1.10", 80, "S"))
         assert f["responder_distinct_sources_60s"] == 100
         assert f["responder_new_conns_10s"] == 200
+        assert f["responder_external_sources_60s"] == 100
+
+    def test_restart_mid_stream_is_not_a_distributed_flood(self):
+        """Capture starting while a laptop's connections are already open: the
+        first packets come from the servers, but nobody opened anything."""
+        tracker = FlowTracker()
+        for i in range(60):
+            f = tracker.update(pkt(i * 0.01, f"104.18.{i}.1", 443, "192.168.1.10", 54000 + i, "A", size=1466))
+        assert f["responder_external_sources_60s"] == 0
+
+    def test_restart_with_quic_flows_is_not_a_distributed_flood(self):
+        """UDP has no handshake: flows seen in the first minute are assumed to
+        be running already, and only later ones count as new."""
+        tracker = FlowTracker()
+        for i in range(60):
+            f = tracker.update(pkt(i * 0.01, f"142.250.{i}.1", 443, "192.168.1.10", 54000 + i, transport="UDP"))
+        assert f["responder_external_sources_60s"] == 0
+        for i in range(60):
+            f = tracker.update(pkt(61 + i * 0.01, f"203.0.113.{i}", 443, "192.168.1.10", 55000 + i, transport="UDP"))
+        assert f["responder_external_sources_60s"] == 60
+
+    def test_restart_mid_stream_is_not_a_sweep(self):
+        tracker = FlowTracker()
+        for i in range(1, 51):
+            f = tracker.update(pkt(i * 0.01, "192.168.1.1", 53, f"192.168.1.{i + 1}", 50000, "A"))
+        assert f["initiator_same_port_local_hosts_60s"] == 0
 
     def test_one_source_hammering_one_service(self):
         """HTTP flood shape: one source opening many connections to one web server."""

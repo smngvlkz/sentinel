@@ -26,6 +26,16 @@ uses [Semantic Versioning](https://semver.org/).
   `device_names` table and shown everywhere in place of the IP, including on
   older alerts. New API endpoints: `GET /devices`, `POST /devices/name`.
 
+### Fixed
+
+- A distributed-flood false alarm against your own device when capture or
+  the analyzer starts on a busy machine (after a reboot, for example). The
+  connections already open were each mistaken for an internet host
+  connecting in, because the first packet seen came from the server. TCP
+  connections joined mid-stream, and UDP flows first seen in the first
+  minute, no longer count as new connections from the internet. Published
+  results are unchanged.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added
