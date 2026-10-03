@@ -48,6 +48,12 @@ uses [Semantic Versioning](https://semver.org/).
   8,278 entries, 8,158 of them zero, and a flood from a million spoofed
   addresses would have left a million behind for good. Addresses are now
   removed when their last flow ends.
+- Packets the analyzer had read but not finished when it was stopped stayed
+  in Redis's list of unfinished work for good, so `pending` on `/health`
+  never returned to 0 after a restart. The analyzer now clears them when it
+  starts (only ones untouched for over a minute, so a second analyzer's
+  in-flight work is left alone). They aren't reprocessed: the flow state
+  they belonged to went with the old run.
 
 ## [0.3.0] - 2026-10-03
 

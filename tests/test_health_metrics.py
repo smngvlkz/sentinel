@@ -155,3 +155,35 @@ def test_capture_counts_dropped_names_in_total():
     r = FakeRedis()
     write_stats(r, names)
     assert json.loads(r.store[STATS_KEY])["names_dropped_total"] == 3
+
+
+class PendingRedis:
+    """A stream group's pending list: message id -> milliseconds since it was read."""
+
+    def __init__(self, pending):
+        self.pending = dict(pending)
+
+    def xpending_range(self, _stream, _group, _min, _max, count, idle=None):
+        ids = [i for i, ms in self.pending.items() if idle is None or ms >= idle][:count]
+        return [{"message_id": i} for i in ids]
+
+    def xack(self, _stream, _group, *ids):
+        return sum(1 for i in ids if self.pending.pop(i, None) is not None)
+
+
+class TestStalePending:
+
+    def test_leftovers_from_an_earlier_run_are_cleared(self):
+        from analysis_service.analyzer import clear_stale_pending
+        r = PendingRedis({"1-0": 114_899_029, "2-0": 19_881_335, "3-0": 15})   # the last is in flight
+        assert clear_stale_pending(r) == 2
+        assert r.pending == {"3-0": 15}
+
+    def test_more_than_one_batch(self):
+        from analysis_service.analyzer import clear_stale_pending
+        r = PendingRedis({f"{i}-0": 120_000 for i in range(2500)})
+        assert clear_stale_pending(r) == 2500 and r.pending == {}
+
+    def test_nothing_to_clear(self):
+        from analysis_service.analyzer import clear_stale_pending
+        assert clear_stale_pending(PendingRedis({})) == 0
