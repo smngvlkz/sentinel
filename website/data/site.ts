@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.3.0",
+  version: "0.4.0",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -103,7 +103,7 @@ export const resultNotes: string[] = [
   "An earlier version of these results had a scoring bug, found by the held-out Wednesday test. The numbers here are the corrected ones.",
 ];
 
-export type FeatureIcon = "radar" | "message" | "tag" | "check" | "shuffle" | "lock" | "play";
+export type FeatureIcon = "radar" | "message" | "tag" | "check" | "shuffle" | "gauge" | "lock" | "play";
 
 export type Feature = { tag: string; icon: FeatureIcon; title: string; body: string; points?: string[] };
 
@@ -150,6 +150,17 @@ export const features: Feature[] = [
     body: "An Isolation Forest trained on your own network's normal traffic flags what doesn't fit. It's off until you train it, and its alerts are never rated high.",
   },
   {
+    tag: "Resilience",
+    icon: "gauge",
+    title: "Holds up under a flood",
+    body: "Everything SentinelAI keeps in memory has a hard limit, so a flood from made-up addresses can't use up your machine. Ten million spoofed connections leave it flat at about 410 MB.",
+    points: [
+      "Connections seen more than once are protected, so a flood has a much harder time pushing a slow scan out of memory before it's caught",
+      "A Memory limit reached alert if a flood ever gets that far",
+      "/health shows how full each table is, how far behind the analyzer is, and any packets lost",
+    ],
+  },
+  {
     tag: "Privacy",
     icon: "lock",
     title: "Private by design",
@@ -163,12 +174,17 @@ export const features: Feature[] = [
   },
 ];
 
-export type NextIcon = "cpu" | "bell" | "sparkles";
+export type NextIcon = "disk" | "cpu" | "bell" | "sparkles";
 
 export type NextItem = { icon: NextIcon; title: string; body: string };
 
 // Planned, not built. Details and "done" criteria are in docs/ROADMAP.md.
 export const next: NextItem[] = [
+  {
+    icon: "disk",
+    title: "Old alerts cleaned up",
+    body: "Alerts older than a set age, 90 days by default, deleted automatically, with a cap on the total as a backstop, so the database can't fill your disk.",
+  },
   {
     icon: "cpu",
     title: "Raspberry Pi installer",
@@ -200,6 +216,10 @@ export const limits: Limit[] = [
   {
     title: "It misses slow attacks and anything inside the payload",
     body: "Slowloris sends almost no traffic, by design, and was missed completely. Heartbleed lives inside encrypted traffic, which SentinelAI doesn't read. Both were 0% in testing.",
+  },
+  {
+    title: "It keeps every alert, for now",
+    body: "Old alerts aren't deleted yet, so on an install that runs for months the database keeps growing. Deleting old alerts automatically is the next thing on the roadmap.",
   },
   {
     title: "It detects, it doesn't block",

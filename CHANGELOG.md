@@ -6,20 +6,24 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-03
+
 ### Added
 
 - Hard limits on everything the analyzer keeps in memory, under `[limits]`
-  in `config/detection.toml`. Before, a flood from a million made-up source
-  addresses in one minute grew the analyzer by 3.5 GB and the cleanup
-  afterwards froze it for 20 seconds. Now ten million such connections
-  leave its memory flat at about 410 MB and no packet waits more than about
-  15 ms. The defaults sit far above anything real traffic has reached, so
+  in `config/detection.toml`. Measured in the analyzer's Docker image under
+  a flood of 20,000 connections a second from unique made-up addresses:
+  0.3.0 grew by about 9.4 GB per million connections and never levelled off
+  (on an 8 GB machine it was killed before reaching a million), with single
+  packets held up for up to 673 ms. Now ten million such connections leave
+  its memory flat at about 410 MB, and no packet waits more than about 15
+  ms. The defaults sit far above anything real traffic has reached, so
   detection is unchanged: the CIC-IDS2017 Friday, Wednesday and Monday
   replays give exactly the published results.
 - Entries seen more than once are protected from floods of one-off entries,
-  so a flood of made-up addresses can't push a slow port scan out of memory
-  before it's caught. Under 20,000 made-up connections a second, a scan
-  probing one port every 5 seconds is now caught (it was missed). It has
+  so the limits don't let a flood of made-up addresses push a slow port scan
+  out of memory before it's caught: under 20,000 made-up connections a
+  second, a scan probing one port every 5 seconds is still caught. It has
   limits: that flood still hides a scan probing every 10 seconds, and a
   flood of 50,000 a second hides one probing every 5.
 - A "Memory limit reached" alert (`RESOURCE_PRESSURE`, high severity, at
@@ -38,7 +42,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Cleanup only looks at entries that have expired instead of every entry,
   and the analyzer skips Python's full garbage collections apart from one an
-  hour; together they removed pauses of up to 200 ms under load.
+  hour. Under a flood, 0.3.0 paused for up to 673 ms; 0.4.0 stays under
+  15 ms.
 
 ### Fixed
 
@@ -54,6 +59,19 @@ uses [Semantic Versioning](https://semver.org/).
   starts (only ones untouched for over a minute, so a second analyzer's
   in-flight work is left alone). They aren't reprocessed: the flow state
   they belonged to went with the old run.
+
+### Known limitations
+
+- Alerts are still never deleted, so the database keeps growing on a
+  long-running install. Deleting old alerts comes in 0.5.0.
+- A fast enough flood of made-up addresses can still hide a slow scan: one
+  probing every 10 seconds under 20,000 made-up connections a second, or
+  every 5 under 50,000. Reaching that point raises the "Memory limit
+  reached" alert.
+- Packets dropped by the kernel before capture sees them aren't reported
+  yet; that comes with the capture rework in roadmap 1.4.
+- The garbage-collector change only helps on Python 3.12, which the analyzer
+  image uses; Python 3.14's collector works differently.
 
 ## [0.3.0] - 2026-10-03
 
@@ -183,7 +201,8 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/smngvlkz/sentinel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/smngvlkz/sentinel/releases/tag/v0.1.0

@@ -29,7 +29,7 @@ load_dotenv()
 
 log = logging.getLogger(__name__)
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 STREAM_NAME = "packet_stream"
 HEARTBEAT_KEY = "sentinel:analyzer:heartbeat"
