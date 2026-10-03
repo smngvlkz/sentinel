@@ -1,5 +1,6 @@
 import {
   Activity,
+  Gauge,
   Network,
   Package,
   Radar,
@@ -112,6 +113,7 @@ const THREAT_ICON: Record<string, LucideIcon> = {
   DISTRIBUTED_FLOOD: Network,
   NETWORK_SWEEP: Waypoints,
   BEACONING: RadioTower,
+  RESOURCE_PRESSURE: Gauge,
 };
 
 /** Monochrome icon for a threat type; shape, not colour, tells types apart. */

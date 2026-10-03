@@ -34,6 +34,18 @@ DEFAULTS: dict[str, dict[str, float]] = {
     # Off by default: learning DNS/HTTP names is a privacy trade-off. Also set
     # PAYLOAD_INSPECTION=true so capture extracts the bindings.
     "names": {"enabled": False, "max_entries": 10_000, "ttl_seconds": 86_400},
+    # Hard caps on the analyzer's in-memory tables; see config/detection.toml.
+    "limits": {
+        "max_flows": 50_000,
+        "max_connections": 200_000,
+        "max_hosts": 50_000,
+        "max_services": 50_000,
+        "max_sweeps": 50_000,
+        "max_window_events": 10_000,
+        "max_beacon_series": 50_000,
+        "max_alert_cooldowns": 10_000,
+        "max_judged_flows": 50_000,
+    },
 }
 
 

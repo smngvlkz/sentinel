@@ -106,3 +106,34 @@ enabled = false
 max_entries = 10000
 # Forget a mapping this many seconds after last seeing it (24 hours).
 ttl_seconds = 86400
+
+[limits]
+# Hard caps on what the analyzer keeps in memory, so a flood of made-up
+# addresses can't use it all up. When a table is full, the entry that has
+# been quiet longest is dropped; flows, hosts, services and sweeps first
+# drop entries seen only once, so a flood of made-up addresses can't push
+# out real ones. The defaults sit far above anything seen on real traffic (a
+# busy office network with a port scan peaked at about 45,000 connections)
+# and use up to about 800 MB when every table is full; lower them on small
+# devices such as a Raspberry Pi. Reaching a limit raises a
+# RESOURCE_PRESSURE alert.
+#
+# One-way flows (source -> destination).
+max_flows = 50000
+# Two-way connections. A port scan creates one per port it tries.
+max_connections = 200000
+# Hosts with a new connection in the last minute.
+max_hosts = 50000
+# (source, destination, port) pairs counted for request floods.
+max_services = 50000
+# (source, port) pairs counted for network sweeps.
+max_sweeps = 50000
+# Connections remembered per host per window. Counts top out here, which is
+# far above every rule threshold (the highest is 400).
+max_window_events = 10000
+# (device, server, port) series watched for regular check-ins.
+max_beacon_series = 50000
+# Alerts being held back from repeating (the cooldown above).
+max_alert_cooldowns = 10000
+# Flows the anomaly model has judged recently.
+max_judged_flows = 50000

@@ -148,6 +148,7 @@ FastAPI ──── Next.js dashboard
 | Network sweep (`NETWORK_SWEEP`) | One source contacting many devices on your network on the same port | > 20 devices in 60 s |
 | Regular check-ins (`BEACONING`) | A device opening connections to the same internet server throughout the last hour, like malware checking in | **Off by default.** When on: ≥ 30 check-ins in 11 of 12 five-minute slots |
 | Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
+| Memory limit reached (`RESOURCE_PRESSURE`) | One of SentinelAI's own memory tables fills up and has to forget entries, which takes a flood from tens of thousands of addresses. Detection may be degraded while it lasts | Limits under `[limits]`; at most one alert every 10 minutes |
 
 Rate-based rules wait until a flow has at least 10 packets over 0.1 seconds,
 so the first packet of an ordinary connection is never flagged.
@@ -168,6 +169,13 @@ Every threshold lives in [`config/detection.toml`](config/detection.toml).
 Edit it and run `make restart`. Busy networks, such as ones with a file server
 or big backups, usually need higher rate limits. To keep your settings outside
 the repo, point `SENTINEL_CONFIG` at your own copy.
+
+The `[limits]` section caps what the analyzer keeps in memory, so a flood of
+made-up addresses can't use it all up. With every table full it uses up to
+about 800 MB; the defaults sit far above anything real traffic needs, so lower
+them on a small device such as a Raspberry Pi. Hitting a limit raises a
+"Memory limit reached" alert. `make stress` floods the analyzer with 10
+million made-up connections to check memory and pauses on your machine.
 
 ### Hostnames on alerts (optional)
 

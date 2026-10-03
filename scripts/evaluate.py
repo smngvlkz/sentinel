@@ -421,7 +421,7 @@ def replay(
         if model is None:
             raise SystemExit("--with-model: no trained model at ml-models/saved/anomaly_model.pkl")
 
-    tracker = FlowTracker()
+    tracker = FlowTracker(limits=config["limits"])
     result = Replay()
     last_cleanup = None
     started = time.time()

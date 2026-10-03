@@ -7,7 +7,7 @@ UI_URL := http://localhost:$(or $(DASHBOARD_UI_PORT),3001)
 
 .DEFAULT_GOAL := help
 .PHONY: help demo demo-stop up down restart logs status build capture setup setup-env setup-python \
-        train-collect train-model test evaluate lint dashboard-dev install-launchd clean
+        train-collect train-model test evaluate stress lint dashboard-dev install-launchd clean
 
 help: ## Show this help
 	@echo "SentinelAI"
@@ -78,6 +78,9 @@ test: ## Run the Python test suite
 
 evaluate: ## Check detection quality on a built-in labelled capture
 	$(PY) scripts/evaluate.py --self-test
+
+stress: ## Flood the analyzer with 10 million spoofed connections (memory caps)
+	$(COMPOSE) run --rm --no-deps -v "$(CURDIR):/app" analyzer python scripts/stress_memory.py
 
 lint: ## Lint Python and the dashboard
 	$(PY) -m ruff check .

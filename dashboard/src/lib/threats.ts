@@ -129,6 +129,20 @@ export const THREATS: Record<string, ThreatInfo> = {
     ],
     features: ["checkins_last_hour", "checkin_slots_last_hour"],
   },
+  RESOURCE_PRESSURE: {
+    name: "Memory limit reached",
+    severity: "high",
+    headline: (_src, dst) => `SentinelAI ran out of room tracking traffic around ${dst}`,
+    what:
+      "SentinelAI keeps track of recent connections in memory, with limits set far above what normal traffic needs. It just hit one and had to forget older entries, which takes a flood of traffic from tens of thousands of different addresses. That's usually an attack, often with made-up source addresses, and while it lasts SentinelAI may miss other, quieter attacks.",
+    nextSteps: [
+      "Look for a flood alert against the same device around the same time; the device shown here had the most connections when the limit was reached.",
+      "If the flood comes from the internet, your ISP can filter it upstream, and your router's firewall can block the port being targeted.",
+      "If your network is genuinely this busy, raise the limits under [limits] in config/detection.toml, provided there's memory to spare.",
+    ],
+    features: ["evicted_last_minute", "tables_dropping", "busiest_peers_60s", "evicted_connections", "evicted_flows", "evicted_hosts"],
+    crowd: { side: "source", feature: "busiest_peers_60s", noun: "addresses" },
+  },
 };
 
 export function threatInfo(type: string): ThreatInfo {
@@ -163,6 +177,12 @@ export const FEATURE_LABELS: Record<string, { label: string; format: (v: number)
   initiator_new_conns_60s: { label: "Connections opened in 60 s", format: (v) => v.toLocaleString() },
   checkins_last_hour: { label: "Check-ins in the last hour", format: (v) => v.toLocaleString() },
   checkin_slots_last_hour: { label: "Five-minute slots with a check-in", format: (v) => `${v} of 12` },
+  evicted_last_minute: { label: "Entries forgotten in the last minute", format: (v) => v.toLocaleString() },
+  tables_dropping: { label: "Memory tables at their limit", format: (v) => v.toFixed(0) },
+  busiest_peers_60s: { label: "Addresses this device dealt with in 60 s", format: (v) => v.toLocaleString() },
+  evicted_connections: { label: "Connections forgotten", format: (v) => v.toLocaleString() },
+  evicted_flows: { label: "Conversations forgotten", format: (v) => v.toLocaleString() },
+  evicted_hosts: { label: "Hosts forgotten", format: (v) => v.toLocaleString() },
 };
 
 // The per-flow numbers shown for threats that don't choose their own.
