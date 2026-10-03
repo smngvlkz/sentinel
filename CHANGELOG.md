@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The analyzer's count of open flows per source address kept an entry for
+  every address it had ever seen, even after its count fell to zero, so its
+  memory grew with every new address. On CIC-IDS2017 Friday it peaked at
+  8,278 entries, 8,158 of them zero, and a flood from a million spoofed
+  addresses would have left a million behind for good. Addresses are now
+  removed when their last flow ends.
+
 ## [0.3.0] - 2026-10-03
 
 ### Added
