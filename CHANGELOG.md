@@ -6,6 +6,17 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Database changes are now migrations: numbered SQL files in
+  `database/migrations/`, applied once each, in order, when the analyzer and
+  API start. Upgrading keeps all alerts, from any earlier release. This
+  replaces `database/schema.sql`, which only ran on a fresh install, and the
+  column-adding code repeated in the analyzer and the API.
+- Alert ids are now 64-bit. They were 32-bit, which runs out at about 2.1
+  billion and never reuses ids. The first start after upgrading rewrites the
+  alerts table once.
+
 ## [0.4.0] - 2026-10-03
 
 ### Added

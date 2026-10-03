@@ -22,6 +22,7 @@ from collections import OrderedDict
 import psycopg2
 from dotenv import load_dotenv
 
+from common.migrations import migrate
 from detection_engine.config import load_config
 
 load_dotenv()
@@ -56,19 +57,11 @@ class AlertManager:
         try:
             self.conn = psycopg2.connect(**self._dsn)
             self.conn.autocommit = True
-            self._ensure_schema()
+            migrate(self.conn)
             log.info("postgresql connected")
         except psycopg2.OperationalError as e:
             log.warning("postgresql unavailable: %s — alerts will only be logged", e)
             self.conn = None
-
-    def _ensure_schema(self) -> None:
-        """Add columns introduced after the first install; no-op when already present."""
-        if self.conn is None:
-            return
-        with self.conn.cursor() as cur:
-            cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS source_name TEXT")
-            cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS destination_name TEXT")
 
     def _reconnect(self) -> None:
         try:

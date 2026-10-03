@@ -25,6 +25,8 @@ import psycopg2.pool
 import redis
 from dotenv import load_dotenv
 
+from common.migrations import migrate
+
 load_dotenv()
 
 log = logging.getLogger(__name__)
@@ -90,19 +92,11 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     if _db_pool is None or _db_pool.closed:
         _db_pool = psycopg2.pool.ThreadedConnectionPool(minconn=2, maxconn=10, **_DB_DSN)
         log.info("postgresql connection pool created")
-        # Columns added after the first install (schema.sql only runs on a fresh volume).
+        # Bring the schema up to date (database/migrations); the analyzer
+        # does the same, and whichever starts second finds nothing to do.
         conn = _db_pool.getconn()
         try:
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS source_name TEXT")
-                cur.execute("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS destination_name TEXT")
-                cur.execute(
-                    """CREATE TABLE IF NOT EXISTS device_names (
-                           ip TEXT PRIMARY KEY,
-                           name TEXT NOT NULL,
-                           updated_at TIMESTAMPTZ DEFAULT NOW())"""
-                )
+            migrate(conn)
         finally:
             _db_pool.putconn(conn)
     return _db_pool
