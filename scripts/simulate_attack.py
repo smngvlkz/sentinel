@@ -10,9 +10,11 @@ runs this in Docker; you can also run it directly:
 Background traffic flows constantly. Every minute the simulator replays
 one of each attack against a pretend machine on your network. Attackers
 use the documentation-only ranges 203.0.113.0/24 and 198.51.100.0/24
-(RFC 5737), so demo alerts can never be mistaken for real hosts.
+(RFC 5737), so demo alerts can never be mistaken for real hosts. Their
+hostnames use the reserved .example domains (RFC 2606) for the same reason.
 """
 
+import json
 import os
 import random
 import time
@@ -35,6 +37,18 @@ HIGH_FREQ_SRC = "198.51.100.77"
 REQUEST_FLOOD_SRC = "198.51.100.44"
 # A compromised device on your network, for the sweep.
 SWEEP_SRC = "192.168.1.66"
+RESOLVER = "192.168.1.1"
+
+# Made-up hostnames for the attackers, as if the victim had looked them up,
+# so demo alerts show names (`make demo` turns name learning on).
+# Real public IPs in background() are deliberately left unnamed.
+DEMO_NAMES = {
+    SYN_FLOOD_SRC: "vps-17.cheap-hosting.example",
+    PORT_SCAN_SRC: "scanner.research.example",
+    LARGE_PAYLOAD_SRC: "files.example.org",
+    HIGH_FREQ_SRC: "resolver.example.net",
+    REQUEST_FLOOD_SRC: "api-client.example.com",
+}
 
 
 def packet(src, dst, dst_port, size, flags="", transport="TCP", src_port=None):
@@ -59,6 +73,13 @@ def handshake(src, dst, dst_port):
         packet(dst, src, sport, 60, "SA", src_port=dst_port),
         packet(src, dst, dst_port, 52, "A", src_port=sport),
     ]
+
+
+def dns_answers():
+    """A DNS reply to the victim carrying the demo names, in capture's name_bindings format."""
+    reply = packet(RESOLVER, VICTIM, random.randint(49152, 65535), 180, transport="UDP", src_port=53)
+    reply["name_bindings"] = json.dumps([[ip, name, VICTIM] for ip, name in DEMO_NAMES.items()])
+    return reply
 
 
 def background():
@@ -120,6 +141,8 @@ def main():
     while True:
         second = (time.time() - start) % CYCLE
         batch = [background() for _ in range(10)] + attacks_for(second, scan_port)
+        if second < TICK:
+            batch.append(dns_answers())  # once a cycle, before the first attack
         if 15 <= second < 18:
             scan_port = scan_port + 8 if scan_port < 1000 else 1
 

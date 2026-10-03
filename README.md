@@ -36,7 +36,9 @@ minute (a connection flood, a port scan, a request flood, a distributed flood,
 a network sweep, an oversized packet and a traffic burst), and you'll see them
 detected within seconds. The simulated attackers on the internet use the IP
 ranges reserved for documentation (`203.0.113.0/24`, `198.51.100.0/24`), so
-they can never be confused with real hosts. The simulated devices on your
+they can never be confused with real hosts. The demo turns on hostname
+learning and gives them made-up names on the reserved `.example` domains, so
+you can see how named alerts look. The simulated devices on your
 network use `192.168.1.x` addresses, which may overlap with real ones on your
 network, so run the demo on its own rather than alongside real capture.
 
@@ -292,6 +294,7 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `DASHBOARD_UI_PORT` | `3001` | Dashboard port |
 | `DASHBOARD_PORT` | `8000` | API port |
 | `ALERT_COOLDOWN_SECONDS` | from `detection.toml` | Overrides the alert de-duplication window |
+| `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
 
 ### Remote access

@@ -83,19 +83,30 @@ def send_heartbeat(r: redis.Redis, started_at: float, processed: int, model_load
         pass
 
 
+def names_enabled(config_value: object, env: str | None) -> bool:
+    """
+    Whether to learn hostnames. NAMES_ENABLED overrides the config file when
+    set (`make demo` turns names on, since its traffic is all made up);
+    otherwise `[names] enabled` decides.
+    """
+    if env is not None and env.strip():
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return bool(config_value)
+
+
 def main() -> None:
     r = connect_redis()
     ensure_consumer_group(r)
 
     config = load_config()
     names_cfg = config["names"]
-    names_enabled = bool(names_cfg.get("enabled"))
+    learn_names = names_enabled(names_cfg.get("enabled"), os.getenv("NAMES_ENABLED"))
     name_cache = (
         NameCache(
             max_entries=int(names_cfg.get("max_entries", 10_000)),
             ttl_seconds=float(names_cfg.get("ttl_seconds", 86_400)),
         )
-        if names_enabled
+        if learn_names
         else None
     )
 
@@ -113,7 +124,7 @@ def main() -> None:
         "listening on stream:%s as %s (names=%s)",
         STREAM_NAME,
         CONSUMER_NAME,
-        "on" if names_enabled else "off",
+        "on" if learn_names else "off",
     )
 
     while True:

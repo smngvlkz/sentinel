@@ -21,7 +21,7 @@ help: ## Show this help
 # ── Try it ──────────────────────────────────────────────────────────────
 
 demo: .env ## Start everything with simulated attacks (no root needed)
-	$(COMPOSE) --profile demo up -d --build
+	NAMES_ENABLED=true $(COMPOSE) --profile demo up -d --build
 	@echo ""
 	@echo "SentinelAI is running with simulated traffic."
 	@echo "Open $(UI_URL) — the first alerts appear within a few seconds."

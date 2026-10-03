@@ -164,3 +164,42 @@ class TestDroppedNamesNeverOverwrite:
         cache = NameCache()
         cache.observe({"name_bindings": json.dumps([["1.2.3.4", "bad name", "10.0.0.5"]])}, now=1.0)
         assert cache.resolve_pairs([("10.0.0.5", "1.2.3.4")], now=2.0) == {}
+
+
+class TestNamesEnabledOverride:
+
+    def test_config_decides_when_env_unset(self):
+        from analysis_service.analyzer import names_enabled
+        assert names_enabled(False, None) is False
+        assert names_enabled(True, None) is True
+        # Blank (as compose passes an unset variable) counts as unset.
+        assert names_enabled(True, "") is True
+        assert names_enabled(False, "  ") is False
+
+    def test_env_wins(self):
+        from analysis_service.analyzer import names_enabled
+        for on in ("1", "true", "TRUE", "yes", "on"):
+            assert names_enabled(False, on) is True
+        for off in ("0", "false", "no", "off"):
+            assert names_enabled(True, off) is False
+
+
+class TestDemoNames:
+    """The simulator's made-up names must survive the real parsing path."""
+
+    def test_demo_bindings_parse_and_resolve(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import simulate_attack as sim
+
+        reply = sim.dns_answers()
+        bindings = parse_bindings(reply)
+        assert len(bindings) == len(sim.DEMO_NAMES)          # none dropped as invalid
+        assert all(name.endswith((".example", ".example.com", ".example.net", ".example.org"))
+                   for _, name, _ in bindings)               # reserved names only (RFC 2606)
+
+        cache = NameCache()
+        cache.observe(reply, now=1.0)
+        # Alerts are attacker → victim; each attacker resolves as seen from the victim.
+        assert cache.resolve_pairs([(sim.PORT_SCAN_SRC, sim.VICTIM)], now=2.0) == {
+            sim.PORT_SCAN_SRC: "scanner.research.example"
+        }
