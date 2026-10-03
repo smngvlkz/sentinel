@@ -19,6 +19,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
+from analysis_service.gc_tuning import FullCollector, tune_gc
+from analysis_service.pressure import PressureMonitor
 from analysis_service.names import NameCache
 from common.flags import env_flag
 from detection_engine.config import load_config
@@ -110,7 +112,7 @@ def main() -> None:
         else None
     )
 
-    tracker = FlowTracker()
+    tracker = FlowTracker(limits=config["limits"])
     detector = DetectionEngine()
     alerts = AlertManager()
 
@@ -119,6 +121,13 @@ def main() -> None:
     last_heartbeat = 0.0
     processed = 0
     model_loaded = detector.anomaly.model is not None
+    # The model and config are loaded; from here on, skip full collections
+    # (see gc_tuning.py) apart from the hourly safety net.
+    tune_gc()
+    full_collector = FullCollector()
+    pressure = PressureMonitor(
+        tracker, {"judged_flows": lambda: detector.evicted, "alert_cooldowns": lambda: alerts.evicted}
+    )
 
     log.info(
         "listening on stream:%s as %s (names=%s)",
@@ -176,6 +185,11 @@ def main() -> None:
             detector.forget_idle(now)
             if name_cache is not None:
                 name_cache.prune(now)
+            full_collector.maybe_collect()
+            alert = pressure.check(now)
+            if alert is not None:
+                threat, packet, features = alert
+                alerts.handle([threat], packet, features)
             if cleaned:
                 log.info("cleaned %d stale flows, total processed: %d", cleaned, processed)
             last_cleanup = now

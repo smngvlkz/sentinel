@@ -8,6 +8,7 @@ Returns a list of threat dictionaries for each packet analyzed.
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 
 from .config import has_rate_evidence, load_config
 from .rules import RuleEngine
@@ -33,7 +34,10 @@ class DetectionEngine:
         self.anomaly = AnomalyDetector()
         self.judge_interval = float(self.config["anomaly"]["judge_interval_seconds"])
         # When the model last judged each (src, dst) flow, in packet time.
-        self._last_judged: dict[tuple[str, str], float] = {}
+        # In order of last judgement, oldest first, at most max_judged_flows.
+        self._last_judged: OrderedDict[tuple[str, str], float] = OrderedDict()
+        self.max_judged = max(1, int(self.config["limits"]["max_judged_flows"]))
+        self.evicted = 0
 
     def detect(
         self,
@@ -80,11 +84,16 @@ class DetectionEngine:
         if last is not None and now - last < self.judge_interval:
             return False
         self._last_judged[flow] = now
+        self._last_judged.move_to_end(flow)
+        while len(self._last_judged) > self.max_judged:
+            self._last_judged.popitem(last=False)
+            self.evicted += 1
         return True
 
     def forget_idle(self, now: float, idle_seconds: float = 300) -> None:
         """Drop judging state for flows not judged recently, so it stays small."""
-        self._last_judged = {k: t for k, t in self._last_judged.items() if now - t <= idle_seconds}
+        while self._last_judged and now - next(iter(self._last_judged.values())) > idle_seconds:
+            self._last_judged.popitem(last=False)
 
 
 def _oriented(packet: dict[str, str], features: dict[str, float]) -> dict[str, object]:

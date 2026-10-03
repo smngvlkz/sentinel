@@ -312,7 +312,9 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNameDevi
           <dd className="text-[13px]">
             {alert.detection_source === "ml"
               ? `Anomaly model, ${(alert.confidence * 100).toFixed(0)}% confidence`
-              : "Detection rule"}
+              : alert.detection_source === "system"
+                ? "SentinelAI's own memory limits"
+                : "Detection rule"}
           </dd>
         </dl>
 

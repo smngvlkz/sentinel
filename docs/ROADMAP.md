@@ -15,8 +15,9 @@ the risks or open questions. The order matters and is explained as it goes.
 - Runs on macOS or Linux with Docker, with capture on the host, watching the
   host's own network interface.
 - Known gaps that affect this plan:
-  - Flow state in the analyzer has no size limit. Stale flows are dropped by
-    scanning every flow once a minute.
+  - The analyzer's in-memory tables have hard limits (1.1, done apart from
+    the `/health` metrics), but a fast enough flood of made-up addresses can
+    still hide a slow scan; see 1.1.
   - The Redis stream between capture and analyzer holds the last 100,000
     packets. If the analyzer falls behind, the oldest packets are dropped
     without anyone knowing.
@@ -36,6 +37,17 @@ deployment, false alarms get their own step before notifications, and data
 retention is added.
 
 ### 1.1 Bounded memory everywhere
+
+**Status:** caps, cheap cleanup, protection for entries seen twice, the
+"Memory limit reached" alert and the stress test (`make stress`) are done.
+The `/health` metrics are next. Measured in the analyzer image: 10 million
+connections from made-up addresses leave memory flat, the slowest packet
+takes under 15 ms, and the CIC-IDS2017 replays are unchanged. A slow scan
+under a flood is caught when it probes faster than the flood can cycle
+through the list of recently dropped entries: every 5 seconds under 20,000
+made-up connections a second, every 2 under 50,000. Still open: a share of
+each table for devices on your network, so outside floods can't push out
+what they do.
 
 **Scope**
 - A hard cap on every per-key table in the analyzer, not just flows:

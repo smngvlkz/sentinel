@@ -12,36 +12,49 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 
+from detection_engine.config import DEFAULTS
+
 from .beacons import BeaconTracker
 from .connections import ConnectionTable, HostActivity, connection_features
+from .seen_twice import SeenTwiceTable
+
+
+def _new_flow() -> dict:
+    return {
+        "start_time": 0.0,
+        "last_seen": 0.0,
+        "packet_count": 0,
+        "total_bytes": 0,
+        "ports_seen": set(),
+        # Ports that received a bare SYN, i.e. a new connection attempt.
+        # Replies from a server land on many ephemeral client ports but
+        # are never bare SYNs, so this is what port-scan detection uses.
+        "syn_ports_seen": set(),
+        # Of those, ports that answered with a SYN-ACK. Scanners mostly
+        # hit closed ports that never answer; legitimate clients opening
+        # many connections (FTP passive mode, for one) get answers.
+        "answered_ports": set(),
+        "ack_count": 0,
+        "flag_counts": defaultdict(int),
+    }
 
 
 class FlowTracker:
 
-    def __init__(self, flow_timeout: float = 30.0) -> None:
-        self.flows: dict[tuple[str, str], dict] = defaultdict(lambda: {
-            "start_time": 0.0,
-            "last_seen": 0.0,
-            "packet_count": 0,
-            "total_bytes": 0,
-            "ports_seen": set(),
-            # Ports that received a bare SYN, i.e. a new connection attempt.
-            # Replies from a server land on many ephemeral client ports but
-            # are never bare SYNs, so this is what port-scan detection uses.
-            "syn_ports_seen": set(),
-            # Of those, ports that answered with a SYN-ACK. Scanners mostly
-            # hit closed ports that never answer; legitimate clients opening
-            # many connections (FTP passive mode, for one) get answers.
-            "answered_ports": set(),
-            "ack_count": 0,
-            "flag_counts": defaultdict(int),
-        })
+    def __init__(self, flow_timeout: float = 30.0, limits: dict[str, int] | None = None) -> None:
+        limits = {**DEFAULTS["limits"], **(limits or {})}
+        # A flood of one-packet flows can't push out flows seen twice (seen_twice.py).
+        self.flows: SeenTwiceTable[tuple[str, str], dict] = SeenTwiceTable(
+            limits["max_flows"], on_evict=lambda key, _: self._release(key[0])
+        )
         self.flow_timeout = flow_timeout
         # Live flows per source; a source with none is removed.
         self.ip_connection_counts: dict[str, int] = {}
-        self.connections = ConnectionTable()
-        self.hosts = HostActivity()
-        self.beacons = BeaconTracker()
+        self.connections = ConnectionTable(limits["max_connections"])
+        self.hosts = HostActivity(
+            limits["max_hosts"], limits["max_services"], limits["max_sweeps"], limits["max_window_events"]
+        )
+        self.beacons = BeaconTracker(limits["max_beacon_series"])
 
     def _flow_key(self, packet: dict[str, str]) -> tuple[str, str]:
         return (packet["src_ip"], packet["dst_ip"])
@@ -50,7 +63,7 @@ class FlowTracker:
         key = self._flow_key(packet)
         now = float(packet["timestamp"])
 
-        flow = self.flows[key]
+        flow = self.flows.touch(key, _new_flow)
         if flow["start_time"] == 0.0:
             flow["start_time"] = now
             src = packet["src_ip"]
@@ -106,17 +119,25 @@ class FlowTracker:
             **self.beacons.features(conn, now),
         }
 
+    @property
+    def evicted(self) -> int:
+        return self.flows.evicted
+
+    def _release(self, src: str) -> None:
+        """One fewer live flow from `src`."""
+        count = self.ip_connection_counts.get(src, 0) - 1
+        if count > 0:
+            self.ip_connection_counts[src] = count
+        else:
+            self.ip_connection_counts.pop(src, None)
+
     def cleanup_stale(self, now: float | None = None) -> int:
         now = now or time.time()
-        stale = [k for k, v in self.flows.items() if now - v["last_seen"] > self.flow_timeout]
-        for k in stale:
-            count = self.ip_connection_counts.get(k[0], 0) - 1
-            if count > 0:
-                self.ip_connection_counts[k[0]] = count
-            else:
-                self.ip_connection_counts.pop(k[0], None)
-            del self.flows[k]
+        stale = self.flows.expire(
+            lambda flow: now - flow["last_seen"] > self.flow_timeout,
+            on_remove=lambda key, _: self._release(key[0]),
+        )
         self.connections.cleanup(now)
         self.hosts.cleanup(now)
         self.beacons.cleanup(now)
-        return len(stale)
+        return stale

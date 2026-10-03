@@ -17,6 +17,7 @@ import os
 import json
 import time
 import logging
+from collections import OrderedDict
 
 import psycopg2
 from dotenv import load_dotenv
@@ -41,11 +42,14 @@ class AlertManager:
             "password": os.getenv("POSTGRES_PASSWORD", "changeme"),
         }
         self.conn: psycopg2.extensions.connection | None = None
-        self.cooldown = float(
-            os.getenv("ALERT_COOLDOWN_SECONDS") or load_config()["alerts"]["cooldown_seconds"]
-        )
-        # key -> (time last emitted, repeats suppressed since, cooldown for this key)
-        self._recent: dict[AlertKey, tuple[float, int, float]] = {}
+        config = load_config()
+        self.cooldown = float(os.getenv("ALERT_COOLDOWN_SECONDS") or config["alerts"]["cooldown_seconds"])
+        # key -> (time last emitted, repeats suppressed since, cooldown for this key),
+        # in order of last emitted. When full, the oldest is dropped, which at
+        # worst lets that alert repeat early.
+        self._recent: OrderedDict[AlertKey, tuple[float, int, float]] = OrderedDict()
+        self.max_recent = max(1, int(config["limits"]["max_alert_cooldowns"]))
+        self.evicted = 0
         self._connect()
 
     def _connect(self) -> None:
@@ -113,6 +117,8 @@ class AlertManager:
             src = "*"
         elif group == "source":
             dst = "*"
+        elif group == "all":
+            src = dst = "*"
         return (str(threat["type"]), src, dst)
 
     def _suppress(self, key: AlertKey, now: float, cooldown: float | None = None) -> int | None:
@@ -123,6 +129,10 @@ class AlertManager:
             self._recent[key] = (last[0], last[1] + 1, last[2])
             return None
         self._recent[key] = (now, 0, cooldown)
+        self._recent.move_to_end(key)
+        while len(self._recent) > self.max_recent:
+            self._recent.popitem(last=False)
+            self.evicted += 1
         return last[1] if last else 0
 
     def prune(self, now: float | None = None) -> int:

@@ -48,6 +48,7 @@ SEVERITY: dict[str, str] = {
     "DISTRIBUTED_FLOOD": "high",
     "NETWORK_SWEEP": "medium",
     "BEACONING": "medium",
+    "RESOURCE_PRESSURE": "high",
 }
 SEVERITIES = ("high", "medium", "low")
 Severity = Literal["high", "medium", "low"]

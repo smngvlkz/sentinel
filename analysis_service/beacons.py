@@ -18,9 +18,9 @@ would look the same over UDP.
 
 from __future__ import annotations
 
-from collections import deque
+from collections import OrderedDict, deque
 
-from .connections import Connection, is_local
+from .connections import _LIMITS, Connection, is_local
 
 WINDOW = 3600.0
 SLOT = 300.0
@@ -32,8 +32,11 @@ BeaconKey = tuple[str, str, str]  # (local host, internet host, port)
 
 class BeaconTracker:
 
-    def __init__(self) -> None:
-        self.checkins: dict[BeaconKey, deque[float]] = {}
+    def __init__(self, max_series: int = _LIMITS["max_beacon_series"]) -> None:
+        # In order of last check-in, oldest first.
+        self.checkins: OrderedDict[BeaconKey, deque[float]] = OrderedDict()
+        self.max_series = max(1, int(max_series))
+        self.evicted = 0
 
     @staticmethod
     def key(conn: Connection) -> BeaconKey | None:
@@ -50,9 +53,13 @@ class BeaconTracker:
         times = self.checkins.get(key)
         if times is None:
             times = self.checkins[key] = deque()
+            while len(self.checkins) > self.max_series:
+                self.checkins.popitem(last=False)
+                self.evicted += 1
         if times and conn.start - times[-1] <= BURST_GAP:
             return
         times.append(conn.start)
+        self.checkins.move_to_end(key)
         self._expire(times, conn.start)
 
     @staticmethod
@@ -72,7 +79,11 @@ class BeaconTracker:
         return {"checkins_last_hour": len(times), "checkin_slots_last_hour": len(slots)}
 
     def cleanup(self, now: float) -> int:
-        quiet = [k for k, times in self.checkins.items() if not times or times[-1] <= now - WINDOW]
-        for k in quiet:
-            del self.checkins[k]
-        return len(quiet)
+        quiet = 0
+        while self.checkins:
+            times = next(iter(self.checkins.values()))
+            if times and times[-1] > now - WINDOW:
+                break
+            self.checkins.popitem(last=False)
+            quiet += 1
+        return quiet

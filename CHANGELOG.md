@@ -6,6 +6,35 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Hard limits on everything the analyzer keeps in memory, under `[limits]`
+  in `config/detection.toml`. Before, a flood from a million made-up source
+  addresses in one minute grew the analyzer by 3.5 GB and the cleanup
+  afterwards froze it for 20 seconds. Now ten million such connections
+  leave its memory flat at about 410 MB and no packet waits more than about
+  15 ms. The defaults sit far above anything real traffic has reached, so
+  detection is unchanged: the CIC-IDS2017 Friday, Wednesday and Monday
+  replays give exactly the published results.
+- Entries seen more than once are protected from floods of one-off entries,
+  so a flood of made-up addresses can't push a slow port scan out of memory
+  before it's caught. Under 20,000 made-up connections a second, a scan
+  probing one port every 5 seconds is now caught (it was missed). It has
+  limits: that flood still hides a scan probing every 10 seconds, and a
+  flood of 50,000 a second hides one probing every 5.
+- A "Memory limit reached" alert (`RESOURCE_PRESSURE`, high severity, at
+  most every 10 minutes) when any of those limits is hit, since that takes a
+  flood far beyond normal traffic and means detection may be degraded.
+- `make stress`: floods the analyzer with 10 million made-up connections and
+  a hidden slow scan, and reports memory, pauses and whether the scan was
+  caught (`scripts/stress_memory.py`).
+
+### Changed
+
+- Cleanup only looks at entries that have expired instead of every entry,
+  and the analyzer skips Python's full garbage collections apart from one an
+  hour; together they removed pauses of up to 200 ms under load.
+
 ### Fixed
 
 - The analyzer's count of open flows per source address kept an entry for

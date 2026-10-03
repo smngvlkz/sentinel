@@ -14,14 +14,25 @@ two views it lacks:
 
 Host activity only changes when a connection starts, which is far rarer
 than packets, so the per-packet cost stays small.
+
+Every table has a hard size cap (`[limits]` in config/detection.toml) and is
+kept in order of last activity, so a full table drops whatever was quiet
+longest, and cleanup removes stale entries from the quiet end without
+looking at the rest.
 """
 
 from __future__ import annotations
 
 import ipaddress
-from collections import Counter, deque
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass
 from functools import lru_cache
+
+from detection_engine.config import DEFAULTS
+
+from .seen_twice import SeenTwiceTable
+
+_LIMITS = DEFAULTS["limits"]
 
 Endpoint = tuple[str, str]  # (ip, port)
 ConnKey = tuple[str, Endpoint, Endpoint]  # (protocol, lower endpoint, higher endpoint)
@@ -84,8 +95,13 @@ def conn_key(protocol: str, a: Endpoint, b: Endpoint) -> ConnKey:
 
 class ConnectionTable:
 
-    def __init__(self) -> None:
-        self.connections: dict[ConnKey, Connection] = {}
+    def __init__(self, max_connections: int = _LIMITS["max_connections"]) -> None:
+        # In order of last packet, oldest first.
+        self.connections: OrderedDict[ConnKey, Connection] = OrderedDict()
+        # Closed connections expire sooner, so they get their own order too.
+        self._closed: OrderedDict[ConnKey, None] = OrderedDict()
+        self.max_connections = max(1, int(max_connections))
+        self.evicted = 0
         self.first_seen: float | None = None
 
     def update(self, packet: dict[str, str]) -> tuple[Connection, bool, bool]:
@@ -122,7 +138,15 @@ class ConnectionTable:
                 conn.before_capture = starting_up
             elif transport == "UDP":
                 conn.before_capture = starting_up
+            self._closed.pop(key, None)  # it may replace a closed one
             self.connections[key] = conn
+            self.connections.move_to_end(key)
+            while len(self.connections) > self.max_connections:
+                old, _ = self.connections.popitem(last=False)
+                self._closed.pop(old, None)
+                self.evicted += 1
+        else:
+            self.connections.move_to_end(key)
 
         outbound = src == conn.initiator
         conn.last_seen = now
@@ -139,41 +163,64 @@ class ConnectionTable:
             conn.established = True
         if "F" in flags or "R" in flags:
             conn.closed = True
+        if conn.closed:
+            self._closed[key] = None
+            self._closed.move_to_end(key)
 
         return conn, is_new, outbound
 
     def cleanup(self, now: float) -> int:
-        stale = [
-            k for k, c in self.connections.items()
-            if now - c.last_seen > (CONN_CLOSED_TIMEOUT if c.closed else CONN_IDLE_TIMEOUT)
-        ]
-        for k in stale:
-            del self.connections[k]
-        return len(stale)
+        """Forget closed connections quiet for 5 s and any connection quiet for 60 s."""
+        removed = 0
+        while self._closed:
+            key = next(iter(self._closed))
+            if now - self.connections[key].last_seen <= CONN_CLOSED_TIMEOUT:
+                break
+            del self._closed[key]
+            del self.connections[key]
+            removed += 1
+        while self.connections:
+            key, conn = next(iter(self.connections.items()))
+            if now - conn.last_seen <= CONN_IDLE_TIMEOUT:
+                break
+            del self.connections[key]
+            self._closed.pop(key, None)
+            removed += 1
+        return removed
 
 
 class WindowCounter:
-    """Events in the last `window` seconds: how many, and how many distinct values."""
+    """
+    Events in the last `window` seconds: how many, and how many distinct
+    values. Holds at most `cap` events (the newest), so under a flood the
+    counts top out at the cap, far above any rule threshold.
+    """
 
-    __slots__ = ("window", "events", "counts")
+    __slots__ = ("window", "events", "counts", "cap")
 
-    def __init__(self, window: float) -> None:
+    def __init__(self, window: float, cap: int = _LIMITS["max_window_events"]) -> None:
         self.window = window
+        self.cap = max(1, int(cap))
         self.events: deque[tuple[float, object]] = deque()
         self.counts: Counter[object] = Counter()
 
     def add(self, now: float, value: object) -> None:
         self.events.append((now, value))
         self.counts[value] += 1
+        if len(self.events) > self.cap:
+            self._drop_oldest()
         self.expire(now)
+
+    def _drop_oldest(self) -> None:
+        _, value = self.events.popleft()
+        self.counts[value] -= 1
+        if not self.counts[value]:
+            del self.counts[value]
 
     def expire(self, now: float) -> None:
         cutoff = now - self.window
         while self.events and self.events[0][0] <= cutoff:
-            _, value = self.events.popleft()
-            self.counts[value] -= 1
-            if not self.counts[value]:
-                del self.counts[value]
+            self._drop_oldest()
 
     def total(self, now: float) -> int:
         self.expire(now)
@@ -187,29 +234,38 @@ class WindowCounter:
 class _Host:
     __slots__ = ("out_10s", "out_60s", "in_10s", "in_60s", "in_external_60s")
 
-    def __init__(self) -> None:
-        self.out_10s = WindowCounter(10)  # connections this host opened; value = responder host
-        self.out_60s = WindowCounter(60)
-        self.in_10s = WindowCounter(10)  # connections opened to this host; value = initiator host
-        self.in_60s = WindowCounter(60)
-        self.in_external_60s = WindowCounter(60)  # the same, from internet hosts only
+    def __init__(self, cap: int) -> None:
+        self.out_10s = WindowCounter(10, cap)  # connections this host opened; value = responder host
+        self.out_60s = WindowCounter(60, cap)
+        self.in_10s = WindowCounter(10, cap)  # connections opened to this host; value = initiator host
+        self.in_60s = WindowCounter(60, cap)
+        self.in_external_60s = WindowCounter(60, cap)  # the same, from internet hosts only
 
 
 class HostActivity:
 
-    def __init__(self) -> None:
-        self.hosts: dict[str, _Host] = {}
+    def __init__(
+        self,
+        max_hosts: int = _LIMITS["max_hosts"],
+        max_services: int = _LIMITS["max_services"],
+        max_sweeps: int = _LIMITS["max_sweeps"],
+        max_window_events: int = _LIMITS["max_window_events"],
+    ) -> None:
+        # A flood of one-off hosts can't push out hosts seen twice (seen_twice.py).
+        self.hosts: SeenTwiceTable[str, _Host] = SeenTwiceTable(max_hosts)
         # (initiator host, responder host, protocol, responder port) -> new connections.
         # Protocol matters: browsers' QUIC is UDP on 443, next to HTTPS on TCP 443.
-        self.services: dict[tuple[str, str, str, str], WindowCounter] = {}
+        self.services: SeenTwiceTable[tuple[str, str, str, str], WindowCounter] = SeenTwiceTable(max_services)
         # (initiator host, protocol, port) -> local hosts it opened connections to
-        self.sweeps: dict[tuple[str, str, str], WindowCounter] = {}
+        self.sweeps: SeenTwiceTable[tuple[str, str, str], WindowCounter] = SeenTwiceTable(max_sweeps)
+        self.window_cap = max(1, int(max_window_events))
+
+    @property
+    def evicted(self) -> dict[str, int]:
+        return {"hosts": self.hosts.evicted, "services": self.services.evicted, "sweeps": self.sweeps.evicted}
 
     def _host(self, ip: str) -> _Host:
-        host = self.hosts.get(ip)
-        if host is None:
-            host = self.hosts[ip] = _Host()
-        return host
+        return self.hosts.touch(ip, lambda: _Host(self.window_cap))
 
     def record(self, conn: Connection) -> None:
         """Record that `conn` just started."""
@@ -227,16 +283,28 @@ class HostActivity:
         if not is_local(init_ip) and not conn.before_capture:
             inbound.in_external_60s.add(now, init_ip)
         service = (init_ip, resp_ip, conn.protocol, conn.responder[1])
-        counter = self.services.get(service)
-        if counter is None:
-            counter = self.services[service] = WindowCounter(10)
-        counter.add(now, None)
+        self.services.touch(service, lambda: WindowCounter(10, self.window_cap)).add(now, None)
         if is_local(resp_ip) and not conn.before_capture:
             sweep = (init_ip, conn.protocol, conn.responder[1])
-            counter = self.sweeps.get(sweep)
-            if counter is None:
-                counter = self.sweeps[sweep] = WindowCounter(60)
-            counter.add(now, resp_ip)
+            self.sweeps.touch(sweep, lambda: WindowCounter(60, self.window_cap)).add(now, resp_ip)
+
+    def busiest(self, now: float) -> tuple[str | None, int, str | None]:
+        """
+        The host with the most new connections in the last minute, either
+        way: (host, how many different hosts it dealt with, the latest of
+        them). Looks at every host, so it's only for the pressure alert.
+        """
+        best, best_total = None, 0
+        for ip, host in self.hosts.items():
+            total = host.in_60s.total(now) + host.out_60s.total(now)
+            if total > best_total:
+                best, best_total = ip, total
+        if best is None:
+            return None, 0, None
+        host = self.hosts[best]
+        windows = [w for w in (host.in_60s, host.out_60s) if w.events]
+        latest = max(windows, key=lambda w: w.events[-1][0]).events[-1][1] if windows else None
+        return best, host.in_60s.distinct(now) + host.out_60s.distinct(now), latest
 
     def features(self, conn: Connection, now: float) -> dict[str, float]:
         init = self.hosts.get(conn.initiator[0])
@@ -256,14 +324,10 @@ class HostActivity:
 
     def cleanup(self, now: float) -> int:
         """Forget hosts and services with nothing in their windows."""
-        idle = [ip for ip, h in self.hosts.items() if not (h.out_60s.total(now) or h.in_60s.total(now))]
-        for ip in idle:
-            del self.hosts[ip]
+        idle = self.hosts.expire(lambda h: not (h.out_60s.total(now) or h.in_60s.total(now)))
         for table in (self.services, self.sweeps):
-            quiet = [k for k, c in table.items() if not c.total(now)]
-            for k in quiet:
-                del table[k]
-        return len(idle)
+            table.expire(lambda c: not c.total(now))
+        return idle
 
 
 def connection_features(conn: Connection, outbound: bool, now: float) -> dict[str, float]:
