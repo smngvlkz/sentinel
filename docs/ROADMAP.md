@@ -36,7 +36,7 @@ easy to roll back.
 | Release | Step | Story |
 |---------|------|-------|
 | 0.1.0 to 0.3.0 | | Shipped: detection, held-out evaluation, hostnames on alerts |
-| 0.4.0 | 1.1 | Memory stays bounded, even under attack. Alerts are still never deleted, so the database keeps growing |
+| 0.4.0 | 1.1 | Shipped: memory stays bounded, even under attack. Alerts are still never deleted, so the database keeps growing |
 | 0.5.0 | 1.2 | Data retention: disk stays bounded too. From here it can run unattended |
 | 0.6.0 | 1.3 | Authentication |
 | 0.7.0 | 1.4 | Seeing the whole network, including running on a Raspberry Pi |

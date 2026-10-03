@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCheck, CirclePlay, Lock, MessageSquareText, Radar, Shuffle, Tag } from "lucide-vue-next";
+import { CheckCheck, CirclePlay, Gauge, Lock, MessageSquareText, Radar, Shuffle, Tag } from "lucide-vue-next";
 import { features, type FeatureIcon } from "~/data/site";
 
 // Same icon set as the dashboard (lucide); Shuffle is its "Unusual traffic" icon.
@@ -9,6 +9,7 @@ const icons: Record<FeatureIcon, unknown> = {
   message: MessageSquareText,
   check: CheckCheck,
   shuffle: Shuffle,
+  gauge: Gauge,
   lock: Lock,
   play: CirclePlay,
 };
