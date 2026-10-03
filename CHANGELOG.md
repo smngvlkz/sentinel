@@ -14,7 +14,13 @@ uses [Semantic Versioning](https://semver.org/).
   (shown in the dashboard next to the IP). Names are remembered per device,
   so shared CDN addresses show the site that device used. Memory only, off
   by default; see `[names]` in `config/detection.toml` and
-  `PAYLOAD_INSPECTION` in `.env`.
+  `PAYLOAD_INSPECTION` in `.env`. Names that aren't valid hostnames are
+  dropped whole rather than cleaned, so a hostile name can't be turned into a
+  real-looking one, and capture logs a count of dropped names at most once a
+  minute. TLS handshakes split across packets (common with post-quantum key
+  shares in current browsers) are joined, so their server names are read
+  too. Replaying 502 real HTTPS connections from a test Mac, the server name
+  was read for 81% before and 99.8% after.
 - Name your own devices from the alert drawer ("Name this device"), e.g.
   `192.168.1.20` → Living room TV. Names are stored by IP in a new
   `device_names` table and shown everywhere in place of the IP, including on
