@@ -15,37 +15,21 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from collections import OrderedDict
 from collections.abc import Iterable
 
+from common.hostnames import valid_hostname
+
 log = logging.getLogger(__name__)
-
-# A DNS name is at most 253 characters.
-MAX_NAME_LEN = 253
-# Same rule as capture_service/capture.py (tests/test_names.py checks they
-# agree): labels of letters, digits, hyphens and underscores.
-_HOSTNAME = re.compile(r"[a-z0-9_-]{1,63}(?:\.[a-z0-9_-]{1,63})*")
-
-
-def valid_hostname(name: str) -> str | None:
-    """
-    `name` as a lowercase hostname, or None if it isn't one. Never cleans:
-    a name with anything else in it is dropped whole. Capture already
-    applies the same check; this guards the analyzer against anything else
-    written to the stream.
-    """
-    name = name.lower()
-    if name.endswith("."):
-        name = name[:-1]
-    if len(name) <= MAX_NAME_LEN and _HOSTNAME.fullmatch(name):
-        return name
-    return None
 
 
 def parse_bindings(packet: dict[str, str]) -> list[tuple[str, str, str | None]]:
-    """Decode `name_bindings` from a stream entry into (ip, name, client)."""
+    """
+    Decode `name_bindings` from a stream entry into (ip, name, client).
+    Names are checked again with capture's rule, in case anything else wrote
+    to the stream.
+    """
     raw = packet.get("name_bindings")
     if not raw:
         return []

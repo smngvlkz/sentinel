@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
 from analysis_service.names import NameCache
+from common.flags import env_flag
 from detection_engine.config import load_config
 from detection_engine.detector import DetectionEngine
 from alert_service.alert_manager import AlertManager
@@ -89,9 +90,8 @@ def names_enabled(config_value: object, env: str | None) -> bool:
     set (`make demo` turns names on, since its traffic is all made up);
     otherwise `[names] enabled` decides.
     """
-    if env is not None and env.strip():
-        return env.strip().lower() in ("1", "true", "yes", "on")
-    return bool(config_value)
+    flag = env_flag(env)
+    return bool(config_value) if flag is None else flag
 
 
 def main() -> None:

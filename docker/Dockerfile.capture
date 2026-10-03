@@ -8,5 +8,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY capture_service/ ./capture_service/
+COPY common/ ./common/
 
 CMD ["python", "capture_service/capture.py"]

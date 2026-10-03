@@ -8,8 +8,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from analysis_service.names import NameCache, parse_bindings, valid_hostname
-from capture_service.capture import _valid_hostname
+from analysis_service.names import NameCache, parse_bindings
+from capture_service.names import NameExtractor
+from common.hostnames import valid_hostname
 
 # 253 characters: the longest a DNS name can be.
 LONGEST = ".".join(["a" * 63, "b" * 63, "c" * 63, "d" * 61])
@@ -48,15 +49,22 @@ INVALID = [
 
 
 @pytest.mark.parametrize("raw,expected", VALID)
-def test_valid_names_pass_in_both(raw, expected):
+def test_valid_names_pass(raw, expected):
     assert valid_hostname(raw) == expected
-    assert _valid_hostname(raw) == expected
+    assert parse_bindings({"name_bindings": json.dumps([["1.2.3.4", raw]])}) == [("1.2.3.4", expected, None)]
+    names = NameExtractor()
+    assert names._valid(raw, "1.2.3.4") == expected
+    assert names.drops.count == 0
 
 
 @pytest.mark.parametrize("raw", INVALID)
-def test_invalid_names_dropped_in_both(raw):
+def test_invalid_names_dropped(raw):
+    """Capture and the analyzer apply the same rule (common/hostnames.py)."""
     assert valid_hostname(raw) is None
-    assert _valid_hostname(raw) is None
+    assert parse_bindings({"name_bindings": json.dumps([["1.2.3.4", raw]])}) == []
+    names = NameExtractor()
+    assert names._valid(raw, "1.2.3.4") is None
+    assert names.drops.count == 1
 
 
 class TestParseBindings:
