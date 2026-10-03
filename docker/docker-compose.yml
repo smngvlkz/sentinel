@@ -53,6 +53,8 @@ services:
       <<: *db-env
       REDIS_HOST: redis
       ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-}
+      # Overrides [names] enabled in detection.toml; `make demo` sets it.
+      NAMES_ENABLED: ${NAMES_ENABLED:-}
     volumes:
       - ../ml-models/saved:/app/ml-models/saved:ro
       - ../config:/app/config:ro

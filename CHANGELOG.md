@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
 ### Added
 
 - Optional hostname context on alerts: when enabled, capture learns IP →
@@ -25,6 +27,18 @@ uses [Semantic Versioning](https://semver.org/).
   `192.168.1.20` → Living room TV. Names are stored by IP in a new
   `device_names` table and shown everywhere in place of the IP, including on
   older alerts. New API endpoints: `GET /devices`, `POST /devices/name`.
+  Alerts from the API now include `source_name`, `destination_name`,
+  `source_device` and `destination_device`.
+
+### Changed
+
+- `make demo` shows hostnames: it turns name learning on (`NAMES_ENABLED`,
+  a new setting that overrides `[names] enabled`) and the simulated
+  attackers get made-up names on the reserved `.example` domains. `make up`
+  is unaffected.
+- Existing installs pick up the new database columns and the
+  `device_names` table automatically when the analyzer and API start, so
+  upgrading from 0.2.0 keeps all stored alerts.
 
 ### Fixed
 
@@ -37,6 +51,15 @@ uses [Semantic Versioning](https://semver.org/).
   connections. After that minute they count again, so floods and sweeps
   that never send a SYN (ACK or RST packets) are counted. Published
   results are unchanged.
+
+### Known limitations
+
+- Hostnames can't be learned from encrypted DNS (DNS over HTTPS/TLS) or
+  from QUIC/HTTP3, where the server name is inside encrypted packets.
+- Device names are stored by IP address, so a device that gets a new
+  address from the router needs naming again.
+- Learned hostnames are chosen by whoever sent the traffic: helpful
+  context, not proof of identity.
 
 ## [0.2.0] - 2026-09-29
 
@@ -111,6 +134,7 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/smngvlkz/sentinel/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/smngvlkz/sentinel/releases/tag/v0.1.0

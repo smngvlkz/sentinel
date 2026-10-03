@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.2.0",
+  version: "0.3.0",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -103,7 +103,7 @@ export const resultNotes: string[] = [
   "An earlier version of these results had a scoring bug, found by the held-out Wednesday test. The numbers here are the corrected ones.",
 ];
 
-export type FeatureIcon = "radar" | "message" | "check" | "shuffle" | "lock" | "play";
+export type FeatureIcon = "radar" | "message" | "tag" | "check" | "shuffle" | "lock" | "play";
 
 export type Feature = { tag: string; icon: FeatureIcon; title: string; body: string; points?: string[] };
 
@@ -127,6 +127,17 @@ export const features: Feature[] = [
     body: "Every alert says what happened, whether the source is on your network or the internet, the evidence behind it, and what to do next.",
   },
   {
+    tag: "Names",
+    icon: "tag",
+    title: "Names, not just addresses",
+    body: "Give your devices names like Living room TV, and optionally let SentinelAI learn which sites they talk to, so an alert reads Office laptop → api.example.com instead of two IP addresses.",
+    points: [
+      "Device names you set, shown everywhere, including on older alerts",
+      "Optional hostnames from DNS, HTTP and TLS, kept in memory only (off by default)",
+      "Anything that isn't a valid hostname is dropped, never cleaned up into a different name",
+    ],
+  },
+  {
     tag: "Review",
     icon: "check",
     title: "A review workflow",
@@ -142,7 +153,7 @@ export const features: Feature[] = [
     tag: "Privacy",
     icon: "lock",
     title: "Private by design",
-    body: "Everything runs on your hardware. It reads packet headers, not contents, and every service listens on 127.0.0.1 only. No account, no cloud.",
+    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on 127.0.0.1 only. No account, no cloud.",
   },
   {
     tag: "Demo",
