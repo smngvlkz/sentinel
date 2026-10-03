@@ -29,6 +29,9 @@ ConnKey = tuple[str, Endpoint, Endpoint]  # (protocol, lower endpoint, higher en
 # Connections idle this long are forgotten; closed ones sooner.
 CONN_IDLE_TIMEOUT = 60.0
 CONN_CLOSED_TIMEOUT = 5.0
+# UDP has no handshake to show a flow is new, so for this long after the
+# first packet every UDP flow is assumed to have been running already.
+UDP_WARMUP = 60.0
 
 
 @dataclass(slots=True)
@@ -78,10 +81,13 @@ class ConnectionTable:
 
     def __init__(self) -> None:
         self.connections: dict[ConnKey, Connection] = {}
+        self.first_seen: float | None = None
 
     def update(self, packet: dict[str, str]) -> tuple[Connection, bool, bool]:
         """Record a packet. Returns (connection, is_new_connection, sent_by_initiator)."""
         now = float(packet["timestamp"])
+        if self.first_seen is None:
+            self.first_seen = now
         src = (packet["src_ip"], packet.get("src_port", "0"))
         dst = (packet["dst_ip"], packet.get("dst_port", "0"))
         flags = packet.get("flags", "")
@@ -103,8 +109,11 @@ class ConnectionTable:
             else:
                 conn = Connection(initiator=src, responder=dst, start=now, last_seen=now, protocol=protocol)
             # Joining a TCP connection mid-stream: treat it as established.
-            if packet.get("transport") == "TCP" and not is_syn and "S" not in flags:
+            transport = packet.get("transport")
+            if transport == "TCP" and not is_syn and "S" not in flags:
                 conn.established = True
+                conn.mid_stream = True
+            elif transport == "UDP" and now - self.first_seen < UDP_WARMUP:
                 conn.mid_stream = True
             self.connections[key] = conn
 
@@ -205,15 +214,16 @@ class HostActivity:
         inbound = self._host(resp_ip)
         inbound.in_10s.add(now, init_ip)
         inbound.in_60s.add(now, init_ip)
-        if not is_local(init_ip):
+        # Connections joined mid-stream aren't new attempts, so they don't
+        # count towards a sweep or a distributed flood (they'd all appear at
+        # once on a restart, with the server mistaken for the initiator).
+        if not is_local(init_ip) and not conn.mid_stream:
             inbound.in_external_60s.add(now, init_ip)
         service = (init_ip, resp_ip, conn.protocol, conn.responder[1])
         counter = self.services.get(service)
         if counter is None:
             counter = self.services[service] = WindowCounter(10)
         counter.add(now, None)
-        # Connections joined mid-stream aren't new attempts, so they don't
-        # count towards a sweep (they'd all appear at once on a restart).
         if is_local(resp_ip) and not conn.mid_stream:
             sweep = (init_ip, conn.protocol, conn.responder[1])
             counter = self.sweeps.get(sweep)
