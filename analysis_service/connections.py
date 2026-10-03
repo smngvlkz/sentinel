@@ -29,9 +29,11 @@ ConnKey = tuple[str, Endpoint, Endpoint]  # (protocol, lower endpoint, higher en
 # Connections idle this long are forgotten; closed ones sooner.
 CONN_IDLE_TIMEOUT = 60.0
 CONN_CLOSED_TIMEOUT = 5.0
-# UDP has no handshake to show a flow is new, so for this long after the
-# first packet every UDP flow is assumed to have been running already.
-UDP_WARMUP = 60.0
+# For this long after the first packet, a connection seen without its
+# opening handshake (TCP without a SYN, or any UDP flow) is assumed to have
+# been open before capture started. After that it counts as new, so floods
+# that never send a SYN (ACK and RST floods) are still counted.
+STARTUP_WINDOW = 60.0
 
 
 @dataclass(slots=True)
@@ -41,9 +43,12 @@ class Connection:
     start: float
     last_seen: float
     protocol: str = ""
-    # Joined partway through (the capture started after it opened), so it
-    # isn't evidence of a new connection being made now.
+    # TCP seen without its SYN: joined partway through, either because
+    # capture started after it opened or because it was forgotten while idle.
     mid_stream: bool = False
+    # Seen without its opening handshake in capture's first minute, so most
+    # likely open before capture started rather than a new connection.
+    before_capture: bool = False
     packets_out: int = 0  # initiator -> responder
     packets_in: int = 0  # responder -> initiator
     bytes_out: int = 0
@@ -110,11 +115,13 @@ class ConnectionTable:
                 conn = Connection(initiator=src, responder=dst, start=now, last_seen=now, protocol=protocol)
             # Joining a TCP connection mid-stream: treat it as established.
             transport = packet.get("transport")
+            starting_up = now - self.first_seen < STARTUP_WINDOW
             if transport == "TCP" and not is_syn and "S" not in flags:
                 conn.established = True
                 conn.mid_stream = True
-            elif transport == "UDP" and now - self.first_seen < UDP_WARMUP:
-                conn.mid_stream = True
+                conn.before_capture = starting_up
+            elif transport == "UDP":
+                conn.before_capture = starting_up
             self.connections[key] = conn
 
         outbound = src == conn.initiator
@@ -214,17 +221,17 @@ class HostActivity:
         inbound = self._host(resp_ip)
         inbound.in_10s.add(now, init_ip)
         inbound.in_60s.add(now, init_ip)
-        # Connections joined mid-stream aren't new attempts, so they don't
-        # count towards a sweep or a distributed flood (they'd all appear at
-        # once on a restart, with the server mistaken for the initiator).
-        if not is_local(init_ip) and not conn.mid_stream:
+        # Connections already open when capture started aren't new attempts,
+        # so they don't count towards a sweep or a distributed flood (they'd
+        # all appear at once, with the server mistaken for the initiator).
+        if not is_local(init_ip) and not conn.before_capture:
             inbound.in_external_60s.add(now, init_ip)
         service = (init_ip, resp_ip, conn.protocol, conn.responder[1])
         counter = self.services.get(service)
         if counter is None:
             counter = self.services[service] = WindowCounter(10)
         counter.add(now, None)
-        if is_local(resp_ip) and not conn.mid_stream:
+        if is_local(resp_ip) and not conn.before_capture:
             sweep = (init_ip, conn.protocol, conn.responder[1])
             counter = self.sweeps.get(sweep)
             if counter is None:

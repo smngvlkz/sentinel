@@ -31,9 +31,11 @@ uses [Semantic Versioning](https://semver.org/).
 - A distributed-flood false alarm against your own device when capture or
   the analyzer starts on a busy machine (after a reboot, for example). The
   connections already open were each mistaken for an internet host
-  connecting in, because the first packet seen came from the server. TCP
-  connections joined mid-stream, and UDP flows first seen in the first
-  minute, no longer count as new connections from the internet. Published
+  connecting in, because the first packet seen came from the server.
+  During capture's first minute, connections seen without their opening
+  handshake (TCP without a SYN, and UDP flows) no longer count as new
+  connections. After that minute they count again, so floods and sweeps
+  that never send a SYN (ACK or RST packets) are counted. Published
   results are unchanged.
 
 ## [0.2.0] - 2026-09-29
