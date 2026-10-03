@@ -6,14 +6,17 @@ import sys
 
 import pytest
 
-_spec = importlib.util.spec_from_file_location(
-    "dashboard_api_main",
-    os.path.join(os.path.dirname(__file__), "..", "dashboard-api", "main.py"),
-)
-api = importlib.util.module_from_spec(_spec)
-# Registered so pydantic can resolve the module's postponed type hints.
-sys.modules[_spec.name] = api
-_spec.loader.exec_module(api)
+if "dashboard_api_main" in sys.modules:  # already loaded by another test file
+    api = sys.modules["dashboard_api_main"]
+else:
+    _spec = importlib.util.spec_from_file_location(
+        "dashboard_api_main",
+        os.path.join(os.path.dirname(__file__), "..", "dashboard-api", "main.py"),
+    )
+    api = importlib.util.module_from_spec(_spec)
+    # Registered so pydantic can resolve the module's postponed type hints.
+    sys.modules[_spec.name] = api
+    _spec.loader.exec_module(api)
 
 
 class TestStreamEntryAge:

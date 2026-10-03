@@ -75,6 +75,10 @@ class DetectionEngine:
 
         return threats
 
+    @property
+    def judged_flows(self) -> int:
+        return len(self._last_judged)
+
     def _due(self, packet: dict[str, str]) -> bool:
         if self.judge_interval <= 0:
             return True

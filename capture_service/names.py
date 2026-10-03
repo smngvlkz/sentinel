@@ -42,12 +42,14 @@ class NameDrops:
 
     def __init__(self, interval: float = 60.0) -> None:
         self.interval = interval
-        self.count = 0
+        self.count = 0  # since the last log line
+        self.total = 0  # since capture started, for /health
         self.latest: tuple[str, str] | None = None
         self.since: float | None = None
 
     def record(self, raw: str, ip: str) -> None:
         self.count += 1
+        self.total += 1
         self.latest = (raw, ip)
 
     def maybe_log(self, now: float) -> bool:

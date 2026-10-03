@@ -44,6 +44,9 @@ CAPTURE_INTERFACE = os.getenv("CAPTURE_INTERFACE", "en0")
 STREAM_NAME = "packet_stream"
 STREAM_MAXLEN = 100_000
 RECONNECT_DELAY = 5
+# Capture's own numbers for /health, written once a minute.
+STATS_KEY = "sentinel:capture:stats"
+STATS_INTERVAL = 60.0
 
 # Off by default: reading DNS/HTTP names is a privacy trade-off. Enable with
 # PAYLOAD_INSPECTION=true (and names.enabled in config/detection.toml).
@@ -60,6 +63,14 @@ def connect_redis() -> redis.Redis:
         except redis.ConnectionError:
             log.warning("redis unavailable, retrying in %ds...", RECONNECT_DELAY)
             time.sleep(RECONNECT_DELAY)
+
+
+def write_stats(r: redis.Redis, names: NameExtractor) -> None:
+    try:
+        r.set(STATS_KEY, json.dumps({"at": time.time(), "names_dropped_total": names.drops.total}),
+              ex=int(STATS_INTERVAL * 3))
+    except redis.ConnectionError:
+        pass
 
 
 def parse_packet(packet: Packet, *, names: NameExtractor | None = None) -> dict[str, str] | None:
@@ -112,11 +123,17 @@ def main() -> None:
         "on" if names is not None else "off",
     )
 
+    last_stats = 0.0
+
     def handle(pkt: Packet) -> None:
-        nonlocal r
+        nonlocal r, last_stats
         entry = parse_packet(pkt, names=names)
         if names is not None:
-            names.drops.maybe_log(time.monotonic())
+            now = time.monotonic()
+            names.drops.maybe_log(now)
+            if now - last_stats >= STATS_INTERVAL:
+                write_stats(r, names)
+                last_stats = now
         if entry is None:
             return
         try:

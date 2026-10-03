@@ -15,12 +15,11 @@ the risks or open questions. The order matters and is explained as it goes.
 - Runs on macOS or Linux with Docker, with capture on the host, watching the
   host's own network interface.
 - Known gaps that affect this plan:
-  - The analyzer's in-memory tables have hard limits (1.1, done apart from
-    the `/health` metrics), but a fast enough flood of made-up addresses can
-    still hide a slow scan; see 1.1.
+  - The analyzer's in-memory tables have hard limits (1.1), but a fast
+    enough flood of made-up addresses can still hide a slow scan; see 1.1.
   - The Redis stream between capture and analyzer holds the last 100,000
-    packets. If the analyzer falls behind, the oldest packets are dropped
-    without anyone knowing.
+    packets. If the analyzer falls behind, the oldest packets are dropped;
+    `/health` now reports the backlog and how many were lost.
   - Alerts are kept in Postgres forever. Disk has already filled up once.
   - Capture uses Scapy, which is easy to read but slow; nothing reports
     packets the kernel dropped.
@@ -28,6 +27,24 @@ the risks or open questions. The order matters and is explained as it goes.
   - SentinelAI reads packet headers only by default. Optional name context
     can learn hostnames (DNS, HTTP Host, TLS SNI) for alerts, and you can
     name your own devices; see the README.
+
+## Releases
+
+One roadmap step per minor release, so each release has one story and is
+easy to roll back.
+
+| Release | Step | Story |
+|---------|------|-------|
+| 0.1.0 to 0.3.0 | | Shipped: detection, held-out evaluation, hostnames on alerts |
+| 0.4.0 | 1.1 | Memory stays bounded, even under attack. Alerts are still never deleted, so the database keeps growing |
+| 0.5.0 | 1.2 | Data retention: disk stays bounded too. From here it can run unattended |
+| 0.6.0 | 1.3 | Authentication |
+| 0.7.0 | 1.4 | Seeing the whole network, including running on a Raspberry Pi |
+| 0.8.0 | 1.5 | Fewer false alarms |
+| 0.9.0 | 1.6 | Notifications |
+| 1.0.0 | 1.7 | After the one-week soak test passes |
+
+Later steps may move as plans change; this table is updated when they do.
 
 ## Part 1: reliable enough to run unattended
 
@@ -38,9 +55,11 @@ retention is added.
 
 ### 1.1 Bounded memory everywhere
 
-**Status:** caps, cheap cleanup, protection for entries seen twice, the
-"Memory limit reached" alert and the stress test (`make stress`) are done.
-The `/health` metrics are next. Measured in the analyzer image: 10 million
+**Status:** done in 0.4.0, apart from packets dropped by the kernel, which
+moves to 1.4 with the capture rework (Scapy doesn't report them). Caps, cheap
+cleanup, protection for entries seen twice, the "Memory limit reached" alert,
+the stress test (`make stress`) and the `/health` metrics are in. Measured
+in the analyzer image: 10 million
 connections from made-up addresses leave memory flat, the slowest packet
 takes under 15 ms, and the CIC-IDS2017 replays are unchanged. A slow scan
 under a flood is caught when it probes faster than the flood can cycle
@@ -164,6 +183,9 @@ Also in scope:
   instead of on the host.
 - A systemd service that starts on boot and restarts on failure.
 - A measured packet rate for each target machine.
+- Packets dropped by the kernel before capture saw them, on `/health`
+  (moved from 1.1: Scapy doesn't report them, so it comes with reworking
+  capture for these targets).
 
 **Done when**
 - A fresh Raspberry Pi 4/5 goes from nothing to a running install in under

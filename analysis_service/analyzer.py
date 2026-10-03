@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from analysis_service.feature_extractor import FlowTracker
 from analysis_service.gc_tuning import FullCollector, tune_gc
 from analysis_service.pressure import PressureMonitor
+from analysis_service.tables import TableReport, Tables
 from analysis_service.names import NameCache
 from common.flags import env_flag
 from detection_engine.config import load_config
@@ -70,7 +71,36 @@ def ensure_consumer_group(r: redis.Redis) -> None:
             raise
 
 
-def send_heartbeat(r: redis.Redis, started_at: float, processed: int, model_loaded: bool) -> None:
+def entries_read(r: redis.Redis) -> int:
+    """
+    Stream entries the consumer group has moved past. Redis counts entries
+    trimmed away before anyone read them as read too, which is what lets
+    StreamLoss tell them apart from the ones actually processed.
+    """
+    for group in r.xinfo_groups(STREAM_NAME):
+        if group.get("name") == CONSUMER_GROUP:
+            return int(group.get("entries-read") or 0)
+    return 0
+
+
+class StreamLoss:
+    """Packets dropped from the stream (capture keeps the newest 100,000) before the analyzer read them."""
+
+    def __init__(self, r: redis.Redis) -> None:
+        self.start = entries_read(r)
+
+    def since_start(self, r: redis.Redis, processed: int) -> int:
+        return max(0, entries_read(r) - self.start - processed)
+
+
+def send_heartbeat(
+    r: redis.Redis,
+    started_at: float,
+    processed: int,
+    model_loaded: bool,
+    tables: dict[str, dict[str, int]] | None = None,
+    lost_unread: int | None = None,
+) -> None:
     try:
         r.set(
             HEARTBEAT_KEY,
@@ -79,6 +109,8 @@ def send_heartbeat(r: redis.Redis, started_at: float, processed: int, model_load
                 "started_at": started_at,
                 "processed": processed,
                 "model_loaded": model_loaded,
+                "tables": tables or {},
+                "lost_unread": lost_unread,
             }),
             ex=HEARTBEAT_TTL,
         )
@@ -125,9 +157,10 @@ def main() -> None:
     # (see gc_tuning.py) apart from the hourly safety net.
     tune_gc()
     full_collector = FullCollector()
-    pressure = PressureMonitor(
-        tracker, {"judged_flows": lambda: detector.evicted, "alert_cooldowns": lambda: alerts.evicted}
-    )
+    tables = Tables(tracker, detector, alerts, name_cache)
+    pressure = PressureMonitor(tables)
+    table_report = TableReport(tables)
+    stream_loss = StreamLoss(r)
 
     log.info(
         "listening on stream:%s as %s (names=%s)",
@@ -176,7 +209,11 @@ def main() -> None:
 
         now = time.time()
         if now - last_heartbeat > HEARTBEAT_INTERVAL:
-            send_heartbeat(r, started_at, processed, model_loaded)
+            try:
+                lost = stream_loss.since_start(r, processed)
+            except redis.RedisError:
+                lost = None
+            send_heartbeat(r, started_at, processed, model_loaded, table_report.report(now), lost)
             last_heartbeat = now
 
         if now - last_cleanup > CLEANUP_INTERVAL:

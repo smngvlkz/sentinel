@@ -329,7 +329,7 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /health` | Status of the database, Redis, capture and analyzer |
+| `GET /health` | Status of the database, Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), and hostnames capture rejected (`names_dropped_total`, when names are on) |
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
 | `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
 | `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |

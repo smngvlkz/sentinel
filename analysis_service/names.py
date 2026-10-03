@@ -67,6 +67,7 @@ class NameCache:
         self.ttl_seconds = max(1.0, float(ttl_seconds))
         # ip or (client, ip) -> (name, last_seen)
         self._entries: OrderedDict[Key, tuple[str, float]] = OrderedDict()
+        self.evicted = 0
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -83,6 +84,7 @@ class NameCache:
             n += 1
         while len(self._entries) > self.max_entries:
             self._entries.popitem(last=False)
+            self.evicted += 1
         return n
 
     def _get(self, key: Key, now: float) -> str | None:

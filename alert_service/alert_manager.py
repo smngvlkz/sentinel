@@ -135,6 +135,11 @@ class AlertManager:
             self.evicted += 1
         return last[1] if last else 0
 
+    @property
+    def cooldowns(self) -> int:
+        """Alerts currently held back from repeating."""
+        return len(self._recent)
+
     def prune(self, now: float | None = None) -> int:
         """Forget cooldowns that have expired so the table does not grow unbounded."""
         now = now or time.time()

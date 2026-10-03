@@ -33,6 +33,9 @@ VERSION = "0.3.0"
 
 STREAM_NAME = "packet_stream"
 HEARTBEAT_KEY = "sentinel:analyzer:heartbeat"
+# Must match the analyzer's consumer group and capture's stats key.
+CONSUMER_GROUP = "analyzers"
+CAPTURE_STATS_KEY = "sentinel:capture:stats"
 # Traffic older than this means capture has stopped or the network is silent.
 CAPTURE_LIVE_SECONDS = 15
 
@@ -217,6 +220,10 @@ def _check_redis_and_pipeline() -> dict[str, Any]:
         state = "live" if age <= CAPTURE_LIVE_SECONDS else "idle"
         capture = {"state": state, "last_packet_seconds_ago": round(age, 1)}
 
+    stats = r.get(CAPTURE_STATS_KEY)
+    if stats:
+        capture["names_dropped_total"] = json.loads(stats).get("names_dropped_total")
+
     beat = r.get(HEARTBEAT_KEY)
     if beat:
         b = json.loads(beat)
@@ -224,11 +231,29 @@ def _check_redis_and_pipeline() -> dict[str, Any]:
             "running": True,
             "model_loaded": b.get("model_loaded", False),
             "packets_processed": b.get("processed", 0),
+            **_stream_backlog(r),
+            "packets_lost_unread": b.get("lost_unread"),
+            "tables": b.get("tables", {}),
         }
     else:
         analyzer = {"running": False}
 
     return {"redis": {"ok": True}, "capture": capture, "analyzer": analyzer}
+
+
+def _stream_backlog(r: redis.Redis) -> dict[str, int | None]:
+    """
+    How far the analyzer is behind capture, live from Redis: `lag` packets
+    not yet read, `pending` read but not finished.
+    """
+    try:
+        groups = r.xinfo_groups(STREAM_NAME)
+    except redis.exceptions.ResponseError:
+        return {"lag": None, "pending": None}
+    for group in groups:
+        if group.get("name") == CONSUMER_GROUP:
+            return {"lag": group.get("lag"), "pending": group.get("pending")}
+    return {"lag": None, "pending": None}
 
 
 @app.get("/health")
