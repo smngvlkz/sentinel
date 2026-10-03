@@ -133,6 +133,7 @@ FastAPI ──── Next.js dashboard
 | `alert_service/` | Logs and stores alerts. Repeats of the same threat for the same pair are suppressed for a cooldown window, so a flood produces one alert instead of thousands. |
 | `dashboard-api/` | Read-only REST API for the dashboard. |
 | `dashboard/` | Next.js dashboard. |
+| `common/` | Small pieces capture and the analyzer must agree on: what counts as a hostname, and how on/off settings are read. |
 
 ## Detection rules
 

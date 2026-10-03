@@ -11,30 +11,20 @@ import logging
 
 import pytest
 
-from capture_service import capture
-from capture_service.capture import (
-    HelloReassembler,
-    NameDrops,
-    extract_name_bindings,
-    parse_packet,
-    _parse_sni,
-    _tls_sni_bindings,
-)
+from capture_service.capture import parse_packet
+from capture_service.names import HelloReassembler, NameDrops, NameExtractor, _parse_sni
 
 
-@pytest.fixture(autouse=True)
-def fresh_drop_counter(monkeypatch):
+@pytest.fixture
+def names():
     """Each test counts its own dropped names, and holds its own split handshakes."""
-    drops = NameDrops()
-    monkeypatch.setattr(capture, "NAME_DROPS", drops)
-    monkeypatch.setattr(capture, "HELLOS", HelloReassembler())
-    return drops
+    return NameExtractor()
 
 
 class TestHostileNamesDropped:
     """Bad names are dropped whole and counted, never cleaned into a real-looking domain."""
 
-    def test_dns_answer(self, fresh_drop_counter):
+    def test_dns_answer(self, names):
         pkt = (
             IP(src="8.8.8.8", dst="10.0.0.1")
             / UDP(sport=53, dport=53000)
@@ -47,11 +37,11 @@ class TestHostileNamesDropped:
             )
         )
         # The good answer in the same packet still counts.
-        assert extract_name_bindings(pkt) == [["1.2.3.5", "real.example.com", "10.0.0.1"]]
-        assert fresh_drop_counter.count == 1
-        assert fresh_drop_counter.latest == ("pay<b>pal.com.", "1.2.3.4")
+        assert names.bindings(pkt) == [["1.2.3.5", "real.example.com", "10.0.0.1"]]
+        assert names.drops.count == 1
+        assert names.drops.latest == ("pay<b>pal.com.", "1.2.3.4")
 
-    def test_non_ascii_dns_bytes_not_stripped(self, fresh_drop_counter):
+    def test_non_ascii_dns_bytes_not_stripped(self, names):
         """Bytes outside ASCII used to be silently removed, which could form a different name."""
         pkt = (
             IP(src="8.8.8.8", dst="10.0.0.1")
@@ -59,17 +49,17 @@ class TestHostileNamesDropped:
             / DNS(id=1, qr=1, qd=DNSQR(qname="x.example"),
                   an=DNSRR(rrname=b"pay\xffpal.com", type="A", rdata="1.2.3.4"))
         )
-        assert extract_name_bindings(pkt) == []
-        assert fresh_drop_counter.count == 1
+        assert names.bindings(pkt) == []
+        assert names.drops.count == 1
 
-    def test_http_host(self, fresh_drop_counter):
+    def test_http_host(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="9.9.9.9")
             / TCP(sport=40000, dport=80)
             / Raw(b"GET / HTTP/1.1\r\nHost: <img src=x onerror=alert(1)>\r\n\r\n")
         )
-        assert extract_name_bindings(pkt) == []
-        assert fresh_drop_counter.count == 1
+        assert names.bindings(pkt) == []
+        assert names.drops.count == 1
 
 
 class TestDropLog:
@@ -109,7 +99,7 @@ class TestDropLog:
 
 class TestDnsBindings:
 
-    def test_a_records(self):
+    def test_a_records(self, names):
         pkt = (
             IP(src="8.8.8.8", dst="10.0.0.1")
             / UDP(sport=53, dport=53000)
@@ -121,12 +111,12 @@ class TestDnsBindings:
                 / DNSRR(rrname="api.example.com", type="A", rdata="1.2.3.5"),
             )
         )
-        assert extract_name_bindings(pkt) == [
+        assert names.bindings(pkt) == [
             ["1.2.3.4", "api.example.com", "10.0.0.1"],
             ["1.2.3.5", "api.example.com", "10.0.0.1"],
         ]
 
-    def test_aaaa_record(self):
+    def test_aaaa_record(self, names):
         pkt = (
             IP(src="8.8.8.8", dst="10.0.0.1")
             / UDP(sport=53, dport=53000)
@@ -137,38 +127,38 @@ class TestDnsBindings:
                 an=DNSRR(rrname="v6.example.com", type="AAAA", rdata="2001:db8::1"),
             )
         )
-        assert extract_name_bindings(pkt) == [["2001:db8::1", "v6.example.com", "10.0.0.1"]]
+        assert names.bindings(pkt) == [["2001:db8::1", "v6.example.com", "10.0.0.1"]]
 
-    def test_query_ignored(self):
+    def test_query_ignored(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="8.8.8.8")
             / UDP(sport=53000, dport=53)
             / DNS(id=3, qr=0, qd=DNSQR(qname="api.example.com"))
         )
-        assert extract_name_bindings(pkt) == []
+        assert names.bindings(pkt) == []
 
 
 class TestHttpHostBindings:
 
-    def test_host_header(self):
+    def test_host_header(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="9.9.9.9")
             / TCP(sport=40000, dport=80)
             / Raw(b"GET / HTTP/1.1\r\nHost: api2.cursor.sh\r\n\r\n")
         )
-        assert extract_name_bindings(pkt) == [["9.9.9.9", "api2.cursor.sh", "10.0.0.1"]]
+        assert names.bindings(pkt) == [["9.9.9.9", "api2.cursor.sh", "10.0.0.1"]]
 
-    def test_host_with_port(self):
+    def test_host_with_port(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="9.9.9.9")
             / TCP(sport=40000, dport=8080)
             / Raw(b"GET / HTTP/1.1\r\nHost: svc.internal:8080\r\n\r\n")
         )
-        assert extract_name_bindings(pkt) == [["9.9.9.9", "svc.internal", "10.0.0.1"]]
+        assert names.bindings(pkt) == [["9.9.9.9", "svc.internal", "10.0.0.1"]]
 
-    def test_non_http_payload_ignored(self):
+    def test_non_http_payload_ignored(self, names):
         pkt = IP(src="10.0.0.1", dst="9.9.9.9") / TCP(sport=40000, dport=443) / Raw(b"\x16\x03\x01tls")
-        assert extract_name_bindings(pkt) == []
+        assert names.bindings(pkt) == []
 
 
 def client_hello(sni: str | None, *, before: int = 0) -> bytes:
@@ -212,26 +202,26 @@ class TestTlsSni:
         assert _parse_sni(b"\x16\x03\x01tls") is None
         assert _parse_sni(b"\x17\x03\x03" + b"\x00" * 60) is None
 
-    def test_binding(self):
+    def test_binding(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="104.18.0.1")
             / TCP(sport=40000, dport=443)
             / Raw(client_hello("API2.Cursor.SH"))
         )
-        assert extract_name_bindings(pkt) == [["104.18.0.1", "api2.cursor.sh", "10.0.0.1"]]
+        assert names.bindings(pkt) == [["104.18.0.1", "api2.cursor.sh", "10.0.0.1"]]
 
-    def test_junk_name_dropped(self):
+    def test_junk_name_dropped(self, names):
         pkt = (
             IP(src="10.0.0.1", dst="104.18.0.1")
             / TCP(sport=40000, dport=443)
             / Raw(client_hello("bad name<script>"))
         )
-        assert extract_name_bindings(pkt) == []
+        assert names.bindings(pkt) == []
 
 
 class TestParsePacketNames:
 
-    def test_bindings_added_when_enabled(self):
+    def test_bindings_added_when_enabled(self, names):
         pkt = (
             IP(src="8.8.8.8", dst="10.0.0.1")
             / UDP(sport=53, dport=53000)
@@ -242,7 +232,7 @@ class TestParsePacketNames:
                 an=DNSRR(rrname="api.example.com", type="A", rdata="1.2.3.4"),
             )
         )
-        entry = parse_packet(pkt, names=True)
+        entry = parse_packet(pkt, names=names)
         assert entry is not None
         assert json.loads(entry["name_bindings"]) == [["1.2.3.4", "api.example.com", "10.0.0.1"]]
 
@@ -257,7 +247,7 @@ class TestParsePacketNames:
                 an=DNSRR(rrname="api.example.com", type="A", rdata="1.2.3.4"),
             )
         )
-        entry = parse_packet(pkt, names=False)
+        entry = parse_packet(pkt, names=None)
         assert entry is not None
         assert "name_bindings" not in entry
 
@@ -269,50 +259,50 @@ def segment(payload: bytes, seq: int, sport: int = 40000):
 class TestSplitClientHello:
     """Post-quantum ClientHellos (~2 KB) span two segments; the name can be in the second."""
 
-    def test_name_in_second_segment(self):
+    def test_name_in_second_segment(self, names):
         hello = client_hello("api2.cursor.sh", before=1600)   # name lands past byte 1600
         first, second = hello[:1400], hello[1400:]
         assert _parse_sni(first) is None                      # not readable from the first alone
-        assert _tls_sni_bindings(segment(first, 1000), now=0.0) == []
-        assert _tls_sni_bindings(segment(second, 1000 + 1400), now=0.01) == [
+        assert names.tls_sni(segment(first, 1000), now=0.0) == []
+        assert names.tls_sni(segment(second, 1000 + 1400), now=0.01) == [
             ["104.18.0.1", "api2.cursor.sh", "10.0.0.1"]
         ]
-        assert len(capture.HELLOS) == 0                       # nothing left held
+        assert len(names.hellos) == 0                       # nothing left held
 
-    def test_name_in_first_segment_not_held(self):
+    def test_name_in_first_segment_not_held(self, names):
         hello = client_hello("example.org", before=0) + b"\x00" * 1500
-        assert _tls_sni_bindings(segment(hello[:1400], 1000), now=0.0) == [
+        assert names.tls_sni(segment(hello[:1400], 1000), now=0.0) == [
             ["104.18.0.1", "example.org", "10.0.0.1"]
         ]
-        assert len(capture.HELLOS) == 0
+        assert len(names.hellos) == 0
 
-    def test_three_segments(self):
+    def test_three_segments(self, names):
         hello = client_hello("three.example", before=3000)
         parts = [hello[:1400], hello[1400:2800], hello[2800:]]
         seq = 5000
         found = []
         for i, part in enumerate(parts):
-            found = _tls_sni_bindings(segment(part, seq), now=i * 0.01)
+            found = names.tls_sni(segment(part, seq), now=i * 0.01)
             seq += len(part)
         assert found == [["104.18.0.1", "three.example", "10.0.0.1"]]
 
-    def test_out_of_order_gives_up(self):
+    def test_out_of_order_gives_up(self, names):
         hello = client_hello("x.example", before=1600)
-        _tls_sni_bindings(segment(hello[:1400], 1000), now=0.0)
+        names.tls_sni(segment(hello[:1400], 1000), now=0.0)
         # A retransmission or gap: wrong sequence number.
-        assert _tls_sni_bindings(segment(hello[1400:], 9999), now=0.01) == []
-        assert len(capture.HELLOS) == 0
+        assert names.tls_sni(segment(hello[1400:], 9999), now=0.01) == []
+        assert len(names.hellos) == 0
 
-    def test_stale_gives_up(self):
+    def test_stale_gives_up(self, names):
         hello = client_hello("x.example", before=1600)
-        _tls_sni_bindings(segment(hello[:1400], 1000), now=0.0)
-        assert _tls_sni_bindings(segment(hello[1400:], 2400), now=5.0) == []
+        names.tls_sni(segment(hello[:1400], 1000), now=0.0)
+        assert names.tls_sni(segment(hello[1400:], 2400), now=5.0) == []
 
-    def test_other_connections_dont_mix(self):
+    def test_other_connections_dont_mix(self, names):
         hello = client_hello("x.example", before=1600)
-        _tls_sni_bindings(segment(hello[:1400], 1000, sport=40000), now=0.0)
+        names.tls_sni(segment(hello[:1400], 1000, sport=40000), now=0.0)
         # Same bytes on a different connection must not complete the first one.
-        assert _tls_sni_bindings(segment(hello[1400:], 2400, sport=40001), now=0.01) == []
+        assert names.tls_sni(segment(hello[1400:], 2400, sport=40001), now=0.01) == []
 
     def test_flood_is_bounded(self):
         r = HelloReassembler(max_flows=256)
