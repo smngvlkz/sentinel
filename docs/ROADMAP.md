@@ -394,8 +394,8 @@ headers, so the model would see IP addresses, ports, counts and rule names,
 which are hard to inject through. Hostile text arrives through:
 - **Optional name context** (built, off by default): hostnames from DNS
   answers, HTTP `Host` headers and TLS SNI, all chosen by whoever sends the
-  traffic. Sanitised to printable ASCII, and SNI to hostname characters, but
-  a hostname can still spell out words.
+  traffic. Anything that isn't a valid hostname is dropped (no spaces,
+  quotes or markup get through), but a hostname can still spell out words.
 - **Device names** (built): typed by the user, so trusted, but still passed
   as data, never as instructions.
 - **Enrichment**, such as reverse DNS lookups (not built). Reverse DNS names

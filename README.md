@@ -186,11 +186,20 @@ The analyzer keeps these names in memory only (capped, forgotten after 24
 hours, relearned within minutes after a restart) and stores a name **only on
 the alert row** when something fires — not on every packet, and not in a
 standing name table. Names are chosen by whoever sent the traffic, so treat
-them as helpful context, not proof of identity.
+them as helpful context, not proof of identity. Anything that isn't a valid
+hostname (letters, digits, dots, hyphens, underscores) is dropped whole,
+never cleaned into a different name, and capture logs a count of dropped
+names at most once a minute, since a malformed name is itself suspicious.
 
-Not covered: encrypted DNS (DNS over HTTPS/TLS), QUIC/HTTP3 (the server name
-is inside encrypted packets), and the occasional large TLS handshake split
-over two packets with the name in the second.
+Modern browsers send TLS handshakes too big for one packet (post-quantum
+keys); on a test Mac about one in five server names only arrived in the
+second packet. Capture briefly holds the first part of such a handshake,
+for at most 2 seconds and within a fixed memory cap, to read the name from
+the rest. Replaying 502 real HTTPS connections, that raised the share of
+names read from 81% to 99.8%.
+
+Not covered: encrypted DNS (DNS over HTTPS/TLS) and QUIC/HTTP3 (the server
+name is inside encrypted packets).
 
 ### Naming your devices
 
