@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY analysis_service/ ./analysis_service/
 COPY common/ ./common/
+COPY database/migrations/ ./database/migrations/
 COPY detection_engine/ ./detection_engine/
 COPY alert_service/ ./alert_service/
 COPY config/ ./config/
