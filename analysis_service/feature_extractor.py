@@ -37,7 +37,8 @@ class FlowTracker:
             "flag_counts": defaultdict(int),
         })
         self.flow_timeout = flow_timeout
-        self.ip_connection_counts: dict[str, int] = defaultdict(int)
+        # Live flows per source; a source with none is removed.
+        self.ip_connection_counts: dict[str, int] = {}
         self.connections = ConnectionTable()
         self.hosts = HostActivity()
         self.beacons = BeaconTracker()
@@ -52,7 +53,8 @@ class FlowTracker:
         flow = self.flows[key]
         if flow["start_time"] == 0.0:
             flow["start_time"] = now
-            self.ip_connection_counts[packet["src_ip"]] += 1
+            src = packet["src_ip"]
+            self.ip_connection_counts[src] = self.ip_connection_counts.get(src, 0) + 1
 
         flow["last_seen"] = now
         flow["packet_count"] += 1
@@ -96,7 +98,7 @@ class FlowTracker:
             "flow_duration": duration,
             "total_packets": flow["packet_count"],
             "total_bytes": flow["total_bytes"],
-            "src_connection_count": self.ip_connection_counts[packet["src_ip"]],
+            "src_connection_count": self.ip_connection_counts.get(packet["src_ip"], 0),
             "syn_count": flow["flag_counts"].get("S", 0),
             "syn_ratio": flow["flag_counts"].get("S", 0) / flow["packet_count"],
             **connection_features(conn, outbound, now),
@@ -108,7 +110,11 @@ class FlowTracker:
         now = now or time.time()
         stale = [k for k, v in self.flows.items() if now - v["last_seen"] > self.flow_timeout]
         for k in stale:
-            self.ip_connection_counts[k[0]] = max(0, self.ip_connection_counts[k[0]] - 1)
+            count = self.ip_connection_counts.get(k[0], 0) - 1
+            if count > 0:
+                self.ip_connection_counts[k[0]] = count
+            else:
+                self.ip_connection_counts.pop(k[0], None)
             del self.flows[k]
         self.connections.cleanup(now)
         self.hosts.cleanup(now)

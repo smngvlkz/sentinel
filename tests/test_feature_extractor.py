@@ -221,4 +221,5 @@ class TestStaleFlowCleanup:
         assert tracker.ip_connection_counts["10.0.0.1"] == 1
 
         tracker.cleanup_stale(now=old_time + 60.0)
-        assert tracker.ip_connection_counts["10.0.0.1"] == 0
+        # Down to zero, so the entry goes rather than being kept forever.
+        assert "10.0.0.1" not in tracker.ip_connection_counts
