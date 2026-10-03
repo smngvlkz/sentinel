@@ -44,6 +44,19 @@ class TestConnectionTable:
         conn, new, _ = table.update(pkt(0.0, SERVER, 443, CLIENT, 50000, "A", size=1400))
         assert new and conn.established
 
+    def test_only_the_first_minute_counts_as_before_capture(self):
+        """Without a SYN a connection is always mid-stream (the check-in rule
+        skips it), but only in the first minute was it likely open before
+        capture started (the flood and sweep counts skip it)."""
+        table = ConnectionTable()
+        table.update(pkt(0.0, CLIENT, 50000, SERVER, 443, "S"))
+        early, _, _ = table.update(pkt(1.0, SERVER, 443, CLIENT, 50001, "A"))
+        late, _, _ = table.update(pkt(61.0, SERVER, 443, CLIENT, 50002, "A"))
+        quic, _, _ = table.update(pkt(2.0, SERVER, 443, CLIENT, 50003, transport="UDP"))
+        assert early.mid_stream and early.before_capture
+        assert late.mid_stream and not late.before_capture
+        assert quic.before_capture and not quic.mid_stream
+
     def test_missed_syn_uses_syn_ack_to_find_the_initiator(self):
         table = ConnectionTable()
         conn, _, out = table.update(pkt(0.0, SERVER, 443, CLIENT, 50000, "SA"))
@@ -111,11 +124,27 @@ class TestHostActivity:
             f = tracker.update(pkt(61 + i * 0.01, f"203.0.113.{i}", 443, "192.168.1.10", 55000 + i, transport="UDP"))
         assert f["responder_external_sources_60s"] == 60
 
+    def test_ack_flood_after_the_first_minute_counts(self):
+        """Floods that never send a SYN (ACK, RST) are only mistaken for
+        connections that were already open during the first minute."""
+        tracker = FlowTracker()
+        tracker.update(pkt(0.0, CLIENT, 50000, SERVER, 443, "S"))
+        for i in range(60):
+            f = tracker.update(pkt(61 + i * 0.01, f"203.0.113.{i}", 40000 + i, "192.168.1.10", 80, "A"))
+        assert f["responder_external_sources_60s"] == 60
+
     def test_restart_mid_stream_is_not_a_sweep(self):
         tracker = FlowTracker()
         for i in range(1, 51):
             f = tracker.update(pkt(i * 0.01, "192.168.1.1", 53, f"192.168.1.{i + 1}", 50000, "A"))
         assert f["initiator_same_port_local_hosts_60s"] == 0
+
+    def test_ack_sweep_after_the_first_minute_counts(self):
+        tracker = FlowTracker()
+        tracker.update(pkt(0.0, CLIENT, 50000, SERVER, 443, "S"))
+        for i in range(1, 51):
+            f = tracker.update(pkt(61 + i * 0.01, "192.168.1.66", 40000 + i, f"192.168.1.{100 + i}", 445, "A"))
+        assert f["initiator_same_port_local_hosts_60s"] == 50
 
     def test_one_source_hammering_one_service(self):
         """HTTP flood shape: one source opening many connections to one web server."""
