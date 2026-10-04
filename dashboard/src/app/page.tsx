@@ -193,7 +193,7 @@ export default function Dashboard() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur">
-        <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex h-14 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <span className="flex items-center gap-2 text-fg">
               <Logo className="size-6" />
@@ -205,7 +205,7 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2 sm:gap-5">
             {loaded && <ServiceStatus health={health} />}
             {auth && <AccountControls auth={auth} onChange={checkAuth} />}
             <ThemeToggle />

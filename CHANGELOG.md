@@ -29,6 +29,17 @@ uses [Semantic Versioning](https://semver.org/).
   check that refuses changes posted from other websites now accepts the
   dashboard's own address, whatever it is, instead of a fixed list.
 
+### Fixed
+
+- The dashboard on phones. The header was wider than the screen, so phones
+  zoomed the whole page out and the margins came out uneven. On small screens
+  the password and log-out buttons are now icons, and the theme switch is a
+  single sun/moon button, like the website's: it follows the system until
+  tapped, then flips between light and dark. Every alert row now has the same
+  lines (name and time, severity, source, "→ destination"), the alert list
+  scrolls with the page instead of in a box that cut it off mid-row, and
+  "Mark as reviewed" spans the width under the filters.
+
 ## [0.5.0] - 2026-10-04
 
 ### Added
