@@ -365,8 +365,14 @@ your router: that puts the login screen on the whole internet.
    `tailscale ip -4`) works too.
 
 The address starts with `http://`, but Tailscale encrypts everything between
-your devices, so the password and alerts aren't sent in the clear. With
-`0.0.0.0`, devices on your own Wi-Fi can reach the login screen too.
+your devices, so the password and alerts aren't sent in the clear.
+
+With `0.0.0.0`, devices on your own Wi-Fi can reach the login screen too. To
+allow Tailscale only, set `DASHBOARD_BIND` to this machine's Tailscale address
+(`100.x.y.z`) instead. Two catches: this machine then has to open the
+dashboard at that address too, not `localhost`; and if Tailscale isn't
+connected when SentinelAI starts (after a reboot, say), the dashboard doesn't
+start and stays down until you run `make up` again.
 
 ## Troubleshooting
 
