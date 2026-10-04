@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-04
+
 ### Fixed
 
 - Changing the password in the dashboard. The cursor jumped back to the
@@ -13,6 +15,11 @@ uses [Semantic Versioning](https://semver.org/).
   current-password field. The first-time **Set a password** dialog had the
   same problem. The dialog moved focus back to its first field whenever the
   dashboard refreshed its clock, which happens every second.
+
+### Changed
+
+- The roadmap and the website give the price of a managed switch with port
+  mirroring in rand (about R350–R1,000) instead of dollars.
 
 ## [0.6.0] - 2026-10-04
 
@@ -314,7 +321,8 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/smngvlkz/sentinel/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/smngvlkz/sentinel/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/smngvlkz/sentinel/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...v0.4.0
