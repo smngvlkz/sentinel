@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { changePassword, setUpPassword } from "@/lib/api";
 
@@ -25,18 +25,26 @@ export default function PasswordDialog({
   const [again, setAgain] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The button that opened the dialog, read while rendering: by the time an
+  // effect runs, autoFocus has already moved focus into the dialog.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  // The latest onClose, so the effect below runs once. The dashboard re-renders
+  // every second; re-running it would hand focus back to the opener mid-typing.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       opener?.focus();
     };
-  }, [onClose]);
+  }, [opener]);
 
   const submit = async () => {
     if (next.length < MIN_LENGTH) return setError(`Use at least ${MIN_LENGTH} characters.`);

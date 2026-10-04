@@ -6,6 +6,14 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing the password in the dashboard. The cursor jumped back to the
+  first field about once a second, so the new password ended up in the
+  current-password field. The first-time **Set a password** dialog had the
+  same problem. The dialog moved focus back to its first field whenever the
+  dashboard refreshed its clock, which happens every second.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added
