@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.4.0",
+  version: "0.5.0",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -152,12 +152,13 @@ export const features: Feature[] = [
   {
     tag: "Resilience",
     icon: "gauge",
-    title: "Holds up under a flood",
-    body: "Everything SentinelAI keeps in memory has a hard limit, so a flood from made-up addresses can't use up your machine. Ten million spoofed connections leave it flat at about 410 MB.",
+    title: "Built to run unattended",
+    body: "Everything SentinelAI keeps has a hard limit, in memory and on disk, so it can run for months without filling up your machine. Ten million spoofed connections leave its memory flat at about 410 MB.",
     points: [
+      "Old alerts deleted after 90 days, with at most 500,000 kept (about 750 MB), so the database can't fill your disk",
       "Connections seen more than once are protected, so a flood has a much harder time pushing a slow scan out of memory before it's caught",
       "A Memory limit reached alert if a flood ever gets that far",
-      "/health shows how full each table is, how far behind the analyzer is, and any packets lost",
+      "/health shows memory, the analyzer's backlog, lost packets and the database's size",
     ],
   },
   {
@@ -174,17 +175,12 @@ export const features: Feature[] = [
   },
 ];
 
-export type NextIcon = "disk" | "cpu" | "bell" | "sparkles";
+export type NextIcon = "cpu" | "bell" | "sparkles";
 
 export type NextItem = { icon: NextIcon; title: string; body: string };
 
 // Planned, not built. Details and "done" criteria are in docs/ROADMAP.md.
 export const next: NextItem[] = [
-  {
-    icon: "disk",
-    title: "Old alerts cleaned up",
-    body: "Alerts older than a set age, 90 days by default, deleted automatically, with a cap on the total as a backstop, so the database can't fill your disk.",
-  },
   {
     icon: "cpu",
     title: "Raspberry Pi installer",
@@ -216,10 +212,6 @@ export const limits: Limit[] = [
   {
     title: "It misses slow attacks and anything inside the payload",
     body: "Slowloris sends almost no traffic, by design, and was missed completely. Heartbleed lives inside encrypted traffic, which SentinelAI doesn't read. Both were 0% in testing.",
-  },
-  {
-    title: "It keeps every alert, for now",
-    body: "Old alerts aren't deleted yet, so on an install that runs for months the database keeps growing. Deleting old alerts automatically is the next thing on the roadmap.",
   },
   {
     title: "It detects, it doesn't block",

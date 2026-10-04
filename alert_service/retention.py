@@ -75,7 +75,9 @@ class Retention:
         self.dsn = dsn
         self.max_age_days = float(max_age_days)
         self.max_alerts = max(1, int(max_alerts))
-        self.last_age_check = 0.0
+        # Never checked: the first pass checks age too, however soon after boot
+        # the analyzer starts (time.monotonic() counts from boot).
+        self.last_age_check = float("-inf")
         self.deleted_total = 0
 
     def run_once(self, conn, check_age: bool = True) -> tuple[int, int]:
