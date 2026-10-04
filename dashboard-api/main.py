@@ -13,8 +13,8 @@ import json
 import logging
 import os
 import time
-from contextlib import contextmanager
-from typing import Any, Generator, Literal
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, AsyncIterator, Generator, Literal
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -77,6 +77,9 @@ def require_login(request: Request) -> None:
     try:
         with get_db() as conn, conn.cursor() as cur:
             if auth.stored_hash(cur) is None:
+                if auth.exposed():
+                    # Only reachable if the password went missing after startup.
+                    raise HTTPException(status_code=503, detail=auth.NO_PASSWORD_WHILE_EXPOSED)
                 return
             if auth.session_valid(cur, request.cookies.get(auth.COOKIE)):
                 return
@@ -89,7 +92,33 @@ def require_login(request: Request) -> None:
     raise HTTPException(status_code=401, detail="Log in first")
 
 
-app = FastAPI(title="SentinelAI", version=VERSION, dependencies=[Depends(require_login)])
+def startup_problem() -> str | None:
+    """
+    Why the API mustn't start: other devices can reach the dashboard
+    (DASHBOARD_BIND) and there's no password yet. None if it may start,
+    including when the database can't be checked: then every request is
+    refused anyway until it can (require_login).
+    """
+    if not auth.exposed():
+        return None
+    try:
+        with get_db() as conn, conn.cursor() as cur:
+            password_set = auth.stored_hash(cur) is not None
+    except psycopg2.Error:
+        return None
+    return None if password_set else auth.NO_PASSWORD_WHILE_EXPOSED
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    problem = startup_problem()
+    if problem:
+        log.error("not starting: %s", problem)
+        raise RuntimeError(problem)
+    yield
+
+
+app = FastAPI(title="SentinelAI", version=VERSION, lifespan=lifespan, dependencies=[Depends(require_login)])
 
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3001").split(",")
 

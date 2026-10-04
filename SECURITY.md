@@ -23,13 +23,18 @@ Only the latest release receives security fixes.
 
 Things to know before deploying:
 
-- **The API has no authentication.** Every port is bound to `127.0.0.1` by
-  default. Don't expose the API or dashboard to a network you don't trust; use
-  an SSH tunnel for remote access.
-- **The one write endpoint (`POST /alerts/review`) refuses cross-site
-  requests.** It rejects any browser `Origin` not in `CORS_ORIGINS` and any
-  body that isn't JSON, so a web page you visit can't mark your alerts as
-  reviewed behind your back.
+- **The dashboard is open until you set a password.** Every port is bound to
+  `127.0.0.1` by default, so only this machine can reach it. Once a password
+  is set (`make password`), every API request needs a login. Letting other
+  devices open the dashboard (`DASHBOARD_BIND`) needs a password: the API
+  refuses to start that way without one, and the API's own port stays on
+  this machine. For access away from home, use Tailscale (README "Opening the
+  dashboard from other devices"), not port forwarding.
+- **Endpoints that change data refuse cross-site requests.** Marking alerts
+  reviewed, naming devices, and logging in or changing the password reject
+  any browser `Origin` that isn't the dashboard's own address or in
+  `CORS_ORIGINS`, and any body that isn't JSON, so a web page you visit can't
+  act on your dashboard behind your back.
 - **Packet capture runs as root** because it reads raw sockets. By default it
   only parses packet headers and never stores payloads. Optional name
   context (`PAYLOAD_INSPECTION` plus `[names]` in config) additionally reads

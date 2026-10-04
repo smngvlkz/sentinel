@@ -20,10 +20,11 @@ the risks or open questions. The order matters and is explained as it goes.
   - The Redis stream between capture and analyzer holds the last 100,000
     packets. If the analyzer falls behind, the oldest packets are dropped;
     `/health` now reports the backlog and how many were lost.
-  - Alerts are kept in Postgres forever. Disk has already filled up once.
+  - Old alerts are deleted (1.2), so the database can't fill the disk.
   - Capture uses Scapy, which is easy to read but slow; nothing reports
     packets the kernel dropped.
-  - The API has no authentication, so everything listens on 127.0.0.1 only.
+  - The dashboard has a password (1.3), needed before other devices can
+    open it.
   - SentinelAI reads packet headers only by default. Optional name context
     can learn hostnames (DNS, HTTP Host, TLS SNI) for alerts, and you can
     name your own devices; see the README.
@@ -129,10 +130,10 @@ This already went wrong once, and it's cheap to fix.
 
 ### 1.3 Authentication
 
-**Status:** the password, login sessions, change and reset (`make password`),
-and the lockout are in. Still to do: the setting for reaching the dashboard
-from other devices (refusing to start that way without a password) and the
-Tailscale guide.
+**Status:** done, for 0.6.0. The password, login sessions, change and reset
+(`make password`), the lockout, the `DASHBOARD_BIND` setting for opening the
+dashboard to other devices (the API refuses to start that way without a
+password) and the Tailscale guide are in.
 
 **Scope**
 - One admin password, set on first run (hashed with argon2), and a session

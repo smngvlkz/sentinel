@@ -1,5 +1,8 @@
-# Every port is bound to 127.0.0.1: the API has no authentication, so the
-# dashboard is only reachable from this machine. See README "Remote access".
+# Every port is bound to 127.0.0.1, so only this machine can reach them,
+# except the dashboard's when DASHBOARD_BIND says otherwise (README "Opening
+# the dashboard from other devices"). The API won't start that way until a
+# password is set. The API's own port always stays on this machine: the
+# dashboard reaches it inside Docker.
 
 x-db-env: &db-env
   POSTGRES_HOST: postgres
@@ -73,6 +76,8 @@ services:
     environment:
       <<: *db-env
       REDIS_HOST: redis
+      # Tells the API whether other devices can reach the dashboard.
+      DASHBOARD_BIND: ${DASHBOARD_BIND:-127.0.0.1}
       # 3000 is the dashboard dev server (make dashboard-dev).
       CORS_ORIGINS: http://localhost:${DASHBOARD_UI_PORT:-3001},http://127.0.0.1:${DASHBOARD_UI_PORT:-3001},http://localhost:3000
     restart: unless-stopped
@@ -84,7 +89,7 @@ services:
       args:
         API_INTERNAL_URL: http://dashboard-api:8000
     ports:
-      - "127.0.0.1:${DASHBOARD_UI_PORT:-3001}:3000"
+      - "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_UI_PORT:-3001}:3000"
     depends_on:
       - dashboard-api
     restart: unless-stopped

@@ -2,7 +2,8 @@
 The dashboard's one admin password (roadmap 1.3).
 
 Until a password is set, the dashboard works as before: open, on this
-machine only. Once one is set, every API request needs a login session. It
+machine only. Letting other devices reach it (DASHBOARD_BIND) needs a
+password first: the API won't start that way without one. Once one is set, every API request needs a login session. It
 can be set from the dashboard on first run, but only while the dashboard is
 reachable from this machine alone (so nobody else on the network can claim
 it first), or at any time with `make password`, which is also the reset for
@@ -32,6 +33,10 @@ FIRST_LOCK_SECONDS = 60
 MAX_LOCK_SECONDS = 15 * 60
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+NO_PASSWORD_WHILE_EXPOSED = (
+    "DASHBOARD_BIND lets other devices open the dashboard, but no password is set. "
+    "Run make password on the machine running SentinelAI."
+)
 _hasher = PasswordHasher()
 
 

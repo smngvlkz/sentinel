@@ -13,7 +13,7 @@ Website: [sentinelids.com](https://sentinelids.com).
 - **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, plus an optional rule for botnet check-ins.
 - **Optional machine-learning model** (Isolation Forest) that learns your network's normal traffic and flags what doesn't fit.
 - **A dashboard that explains itself.** Every alert says what happened, whether the source is on your network or the internet, and what to do next.
-- **Runs locally.** Your traffic never leaves your machine, and every service listens only on `127.0.0.1`.
+- **Runs locally.** Your traffic never leaves your machine, and every service listens only on `127.0.0.1` unless you open the dashboard to your other devices, which needs a password.
 
 > [!IMPORTANT]
 > **Only monitor networks you own or have explicit permission to monitor.**
@@ -308,7 +308,8 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `CAPTURE_INTERFACE` | `en0` | Network interface to capture from |
 | `POSTGRES_PASSWORD` | `changeme` | Database password. Change it if anything else can reach your machine. |
 | `DASHBOARD_UI_PORT` | `3001` | Dashboard port |
-| `DASHBOARD_PORT` | `8000` | API port |
+| `DASHBOARD_PORT` | `8000` | API port. Always reachable from this machine only. |
+| `DASHBOARD_BIND` | `127.0.0.1` | Who can open the dashboard: `127.0.0.1` for this machine only, `0.0.0.0` for other devices too. Needs a password; see [Opening the dashboard from other devices](#opening-the-dashboard-from-other-devices). |
 | `ALERT_COOLDOWN_SECONDS` | from `detection.toml` | Overrides the alert de-duplication window |
 | `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
@@ -331,13 +332,41 @@ machine too, and every API request needs a login. A login lasts 14 days.
 The password is stored as an argon2id hash, and login sessions as SHA-256
 hashes of their tokens, so a copy of the database can't be used to log in.
 
-### Remote access
+### Opening the dashboard from other devices
 
-Every port is bound to `127.0.0.1`. To view the dashboard from another device,
-set a password (above), then use an SSH tunnel
-(`ssh -L 3001:localhost:3001 your-server`) rather than exposing the port. The
-dashboard reaches the API through its own address (`/api`), so the dashboard's
-port is the only one you need.
+By default only the machine running SentinelAI can open the dashboard. To open
+it from your phone or laptop:
+
+1. Set a password: `make password`.
+2. In `.env`, set `DASHBOARD_BIND=0.0.0.0`.
+3. Run `make up`.
+
+Then open `http://<this machine's address>:3001` on the other device and log in.
+Only the dashboard's port opens. The API, Postgres and Redis stay on this
+machine; the dashboard reaches the API inside Docker.
+
+If no password is set, the API refuses to start, so the dashboard shows
+**Offline** and no data. Run `make password` and it starts within a few
+seconds. Setting the first password from the dashboard is also turned off
+while it's open to other devices, so nobody else on your network can claim
+it first.
+
+#### From anywhere, with Tailscale
+
+To check the dashboard away from home, use [Tailscale](https://tailscale.com),
+a free private network between your own devices. Don't forward the port on
+your router: that puts the login screen on the whole internet.
+
+1. Install Tailscale on the machine running SentinelAI and on your phone, and
+   sign in to the same account on both.
+2. Set the password and `DASHBOARD_BIND=0.0.0.0` as above, then `make up`.
+3. On your phone, open `http://<machine name>:3001`, using the machine's name
+   as the Tailscale app shows it. Its Tailscale address (`100.x.y.z`, shown by
+   `tailscale ip -4`) works too.
+
+The address starts with `http://`, but Tailscale encrypts everything between
+your devices, so the password and alerts aren't sent in the clear. With
+`0.0.0.0`, devices on your own Wi-Fi can reach the login screen too.
 
 ## Troubleshooting
 
