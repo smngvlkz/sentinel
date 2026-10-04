@@ -50,6 +50,10 @@ uses [Semantic Versioning](https://semver.org/).
   lines (name and time, severity, source, "→ destination"), the alert list
   scrolls with the page instead of in a box that cut it off mid-row, and
   "Mark as reviewed" spans the width under the filters.
+- Building the dashboard no longer downloads its fonts from Google Fonts.
+  Google sometimes serves a font address that Next.js can't parse, which
+  failed the build at random, and building needed the internet. Inter and
+  JetBrains Mono now ship with the dashboard, under their open font licence.
 
 ### Known limitations
 
