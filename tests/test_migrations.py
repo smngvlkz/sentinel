@@ -3,7 +3,6 @@
 import os
 import sys
 import threading
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -13,8 +12,6 @@ import pytest
 from common.migrations import MIGRATIONS_DIR, available, migrate
 
 FIXTURES = Path(__file__).parent / "fixtures"
-# e.g. postgresql://postgres:postgres@localhost:5432/postgres (CI sets it).
-TEST_DB_URL = os.getenv("SENTINEL_TEST_DATABASE_URL")
 
 
 def write(directory, files):
@@ -94,27 +91,6 @@ class TestRunner:
         assert "C;" not in conn.statements
         assert any("pg_advisory_unlock" in s for s in conn.statements)  # lock released anyway
         assert conn.autocommit is True
-
-
-@pytest.fixture
-def database():
-    """A fresh, empty database on the test server, dropped afterwards."""
-    if not TEST_DB_URL:
-        pytest.skip("set SENTINEL_TEST_DATABASE_URL to run against a real Postgres")
-    import psycopg2
-
-    name = f"sentinel_test_{uuid.uuid4().hex[:10]}"
-    admin = psycopg2.connect(TEST_DB_URL)
-    admin.autocommit = True
-    with admin.cursor() as cur:
-        cur.execute(f"CREATE DATABASE {name}")
-    url = TEST_DB_URL.rsplit("/", 1)[0] + "/" + name
-    try:
-        yield lambda: psycopg2.connect(url)
-    finally:
-        with admin.cursor() as cur:
-            cur.execute(f"DROP DATABASE {name} WITH (FORCE)")
-        admin.close()
 
 
 def column_type(cur, table, column):

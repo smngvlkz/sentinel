@@ -18,6 +18,7 @@ import json
 import time
 import logging
 from collections import OrderedDict
+from typing import Any
 
 import psycopg2
 from dotenv import load_dotenv
@@ -52,6 +53,11 @@ class AlertManager:
         self.max_recent = max(1, int(config["limits"]["max_alert_cooldowns"]))
         self.evicted = 0
         self._connect()
+
+    @property
+    def dsn(self) -> dict[str, Any]:
+        """Connection settings, for other connections to the same database."""
+        return dict(self._dsn)
 
     def _connect(self) -> None:
         try:

@@ -137,3 +137,13 @@ max_beacon_series = 50000
 max_alert_cooldowns = 10000
 # Flows the anomaly model has judged recently.
 max_judged_flows = 50000
+
+[retention]
+# Old alerts are deleted so the database can't fill the disk. Alerts older
+# than this many days go (checked hourly)...
+max_age_days = 90
+# ...and at most this many are kept, newest first (checked every minute), as a
+# backstop for a flood of alerts. An alert takes about 1.5 KB with its
+# indexes, so the default keeps the database to roughly 750 MB, plus at most a
+# minute's worth of new alerts until the next check.
+max_alerts = 500000

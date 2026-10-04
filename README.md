@@ -178,6 +178,12 @@ them on a small device such as a Raspberry Pi. Hitting a limit raises a
 "Memory limit reached" alert. `make stress` floods the analyzer with 10
 million made-up connections to check memory and pauses on your machine.
 
+Old alerts are deleted so the database can't fill the disk: under
+`[retention]`, alerts older than 90 days go, and at most 500,000 are kept
+(about 750 MB), newest first. The analyzer checks every minute in the
+background, so even a flood of alerts can't grow the database much past
+that: at most by the alerts of one minute.
+
 ### Hostnames on alerts (optional)
 
 By default SentinelAI only sees IP addresses. To show names like
@@ -330,7 +336,7 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /health` | Status of the database, Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), and hostnames capture rejected (`names_dropped_total`, when names are on) |
+| `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), and hostnames capture rejected (`names_dropped_total`, when names are on) |
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
 | `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
 | `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |

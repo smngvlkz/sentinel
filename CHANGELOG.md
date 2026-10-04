@@ -6,6 +6,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Old alerts are deleted automatically, so the database can't fill the
+  disk. Under `[retention]` in `config/detection.toml`: alerts older than
+  `max_age_days` (90) are deleted hourly, and at most `max_alerts` (500,000,
+  about 750 MB) are kept, newest first, checked every minute as a backstop
+  against floods of alerts. It runs in a background thread in small batches,
+  then VACUUMs, so Postgres reuses the freed space: in testing, sixty
+  floods in a row settled at a fixed size instead of growing.
+- `/health` reports the database's size on disk, roughly how many alerts it
+  holds, and when the oldest one is from.
+
 ### Changed
 
 - Database changes are now migrations: numbered SQL files in
