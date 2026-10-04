@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Any, Generator, Literal
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator, model_validator
 import psycopg2
@@ -27,6 +27,8 @@ import redis
 from dotenv import load_dotenv
 
 from common.migrations import migrate
+
+from . import auth
 
 load_dotenv()
 
@@ -60,7 +62,34 @@ SEVERITIES = ("high", "medium", "low")
 Severity = Literal["high", "medium", "low"]
 ReviewStatus = Literal["all", "unreviewed", "reviewed"]
 
-app = FastAPI(title="SentinelAI", version=VERSION)
+# Reachable without logging in: only what the login screen needs.
+PUBLIC_PATHS = {"/auth/status", "/auth/login", "/auth/setup"}
+
+
+def require_login(request: Request) -> None:
+    """
+    Once a password is set, every endpoint needs a login session; before that
+    the dashboard is open, on this machine only, as it always was. Applied to
+    the whole app, so a new endpoint is protected without anyone remembering.
+    """
+    if request.url.path in PUBLIC_PATHS:
+        return
+    try:
+        with get_db() as conn, conn.cursor() as cur:
+            if auth.stored_hash(cur) is None:
+                return
+            if auth.session_valid(cur, request.cookies.get(auth.COOKIE)):
+                return
+    except psycopg2.Error:
+        # Can't check a login without the database: refuse, except /health,
+        # which is how the dashboard says the database is down.
+        if request.url.path == "/health":
+            return
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    raise HTTPException(status_code=401, detail="Log in first")
+
+
+app = FastAPI(title="SentinelAI", version=VERSION, dependencies=[Depends(require_login)])
 
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3001").split(",")
 
@@ -279,6 +308,106 @@ def _stream_backlog(r: redis.Redis) -> dict[str, int | None]:
         if group.get("name") == CONSUMER_GROUP:
             return {"lag": group.get("lag"), "pending": group.get("pending")}
     return {"lag": None, "pending": None}
+
+
+class PasswordRequest(BaseModel):
+    password: str = Field(max_length=auth.MAX_LENGTH)
+
+
+class ChangePasswordRequest(BaseModel):
+    current: str = Field(max_length=auth.MAX_LENGTH)
+    new: str = Field(max_length=auth.MAX_LENGTH)
+
+
+def _start_session(cur, response: Response) -> None:
+    response.set_cookie(
+        auth.COOKIE, auth.new_session(cur), max_age=auth.SESSION_SECONDS, path="/", httponly=True, samesite="strict"
+    )
+
+
+def _locked(seconds: int) -> HTTPException:
+    minutes = -(-seconds // 60)
+    return HTTPException(
+        status_code=429,
+        detail=f"Too many wrong passwords. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+        headers={"Retry-After": str(seconds)},
+    )
+
+
+@app.get("/auth/status")
+def auth_status(request: Request) -> dict[str, bool]:
+    """What the dashboard should show: the login screen, the first-run setup offer, or nothing."""
+    with get_db() as conn, conn.cursor() as cur:
+        password_set = auth.stored_hash(cur) is not None
+        logged_in = password_set and auth.session_valid(cur, request.cookies.get(auth.COOKIE))
+    return {"password_set": password_set, "logged_in": logged_in, "setup_allowed": not password_set and not auth.exposed()}
+
+
+@app.post("/auth/setup", dependencies=[Depends(require_trusted_request)])
+def auth_setup(body: PasswordRequest, response: Response) -> dict[str, bool]:
+    """
+    First run: set the password from the dashboard. Only while the dashboard is
+    reachable from this machine alone, so nobody else on the network can claim
+    it first; otherwise use `make password`.
+    """
+    if auth.exposed():
+        raise HTTPException(status_code=403, detail="Set the password with make password on the machine running SentinelAI.")
+    problem = auth.problem_with(body.password)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+    with get_db() as conn, conn.cursor() as cur:
+        if not auth.claim_password(cur, body.password):
+            raise HTTPException(status_code=409, detail="A password is already set.")
+        _start_session(cur, response)
+    return {"ok": True}
+
+
+@app.post("/auth/login", dependencies=[Depends(require_trusted_request)])
+def auth_login(body: PasswordRequest, response: Response) -> dict[str, bool]:
+    with get_db() as conn, conn.cursor() as cur:
+        if auth.stored_hash(cur) is None:
+            raise HTTPException(status_code=409, detail="No password is set yet.")
+        wait = auth.locked_for(cur)
+        if wait:
+            raise _locked(wait)
+        if not auth.password_matches(cur, body.password):
+            wait = auth.record_failure(cur)
+            if wait:
+                raise _locked(wait)
+            raise HTTPException(status_code=401, detail="Wrong password.")
+        auth.record_success(cur)
+        _start_session(cur, response)
+    return {"ok": True}
+
+
+@app.post("/auth/logout", dependencies=[Depends(require_trusted_request)])
+def auth_logout(request: Request, response: Response) -> dict[str, bool]:
+    with get_db() as conn, conn.cursor() as cur:
+        auth.end_session(cur, request.cookies.get(auth.COOKIE))
+    response.delete_cookie(auth.COOKIE, path="/", httponly=True, samesite="strict")
+    return {"ok": True}
+
+
+@app.post("/auth/password", dependencies=[Depends(require_trusted_request)])
+def auth_change_password(body: ChangePasswordRequest, response: Response) -> dict[str, bool]:
+    """Change the password: needs the current one; logs out every other session."""
+    with get_db() as conn, conn.cursor() as cur:
+        if auth.stored_hash(cur) is None:
+            raise HTTPException(status_code=409, detail="No password is set yet.")
+        wait = auth.locked_for(cur)
+        if wait:
+            raise _locked(wait)
+        if not auth.password_matches(cur, body.current):
+            wait = auth.record_failure(cur)
+            if wait:
+                raise _locked(wait)
+            raise HTTPException(status_code=401, detail="The current password is wrong.")
+        problem = auth.problem_with(body.new)
+        if problem:
+            raise HTTPException(status_code=422, detail=problem)
+        auth.set_password(cur, body.new)  # logs every session out...
+        _start_session(cur, response)  # ...then this browser back in
+    return {"ok": True}
 
 
 @app.get("/health")

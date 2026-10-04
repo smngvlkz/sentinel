@@ -6,6 +6,19 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A dashboard password (roadmap 1.3). Set it from the dashboard
+  (**Set a password**, offered only while the dashboard is reachable from
+  this machine alone) or with `make password`; from then on the dashboard
+  asks for it and every API endpoint refuses requests without a login.
+  Logins last 14 days. Change it from the dashboard (needs the current one,
+  logs out every other device); reset a forgotten one with `make password`
+  on the machine, which also logs everyone out. Five wrong passwords in a
+  row lock logins for a minute, doubling up to 15 minutes. Stored as an
+  argon2id hash; sessions as SHA-256 hashes of their tokens. Without a
+  password, the dashboard works exactly as before.
+
 ### Changed
 
 - The dashboard reaches the API through its own address: the browser calls

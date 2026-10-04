@@ -313,10 +313,28 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
 
+### Dashboard password
+
+Out of the box the dashboard has no password and is reachable from this
+machine only. To add one, click **Set a password** in the dashboard's header,
+or run `make password`. From then on it asks for the password, on this
+machine too, and every API request needs a login. A login lasts 14 days.
+
+- **Change it** from the dashboard (**Change password**). It needs the current
+  password, and logs out every other device.
+- **Forgot it?** Run `make password` on the machine running SentinelAI (or
+  over SSH to it). It sets a new one and logs out every device. Alerts and
+  device names aren't touched.
+- After 5 wrong passwords in a row, logins are refused for a minute, doubling
+  with each further wrong one up to 15 minutes. `make password` clears that.
+
+The password is stored as an argon2id hash, and login sessions as SHA-256
+hashes of their tokens, so a copy of the database can't be used to log in.
+
 ### Remote access
 
-The API has no authentication, so every port is bound to `127.0.0.1`. To view
-the dashboard from another device, use an SSH tunnel
+Every port is bound to `127.0.0.1`. To view the dashboard from another device,
+set a password (above), then use an SSH tunnel
 (`ssh -L 3001:localhost:3001 your-server`) rather than exposing the port. The
 dashboard reaches the API through its own address (`/api`), so the dashboard's
 port is the only one you need.
@@ -337,6 +355,8 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 
 | Endpoint | Returns |
 |----------|---------|
+| `GET /auth/status` | Whether a password is set and this browser is logged in. Once a password is set, this, `POST /auth/login` and `POST /auth/setup` are the only endpoints that work without logging in |
+| `POST /auth/login`, `/auth/logout`, `/auth/setup`, `/auth/password` | Log in or out, set the first password (from this machine only), change it (`{"current": ..., "new": ...}`) |
 | `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), and hostnames capture rejected (`names_dropped_total`, when names are on) |
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
 | `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |

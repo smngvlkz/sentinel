@@ -129,6 +129,11 @@ This already went wrong once, and it's cheap to fix.
 
 ### 1.3 Authentication
 
+**Status:** the password, login sessions, change and reset (`make password`),
+and the lockout are in. Still to do: the setting for reaching the dashboard
+from other devices (refusing to start that way without a password) and the
+Tailscale guide.
+
 **Scope**
 - One admin password, set on first run (hashed with argon2), and a session
   cookie.

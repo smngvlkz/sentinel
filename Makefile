@@ -6,7 +6,7 @@ PY := .venv/bin/python
 UI_URL := http://localhost:$(or $(DASHBOARD_UI_PORT),3001)
 
 .DEFAULT_GOAL := help
-.PHONY: help demo demo-stop up down restart logs status build capture setup setup-env setup-python \
+.PHONY: help demo demo-stop up down password restart logs status build capture setup setup-env setup-python \
         train-collect train-model test evaluate stress lint dashboard-dev install-launchd clean
 
 help: ## Show this help
@@ -50,6 +50,9 @@ capture: ## Capture live packets from CAPTURE_INTERFACE (asks for sudo)
 
 down: ## Stop all services
 	$(COMPOSE) --profile demo down
+
+password: ## Set or reset the dashboard password (also logs everyone out)
+	$(COMPOSE) exec dashboard-api python -m dashboard-api.set_password
 
 restart: ## Restart the analyzer (after editing config or training a model)
 	$(COMPOSE) restart analyzer

@@ -67,7 +67,15 @@ export interface Health {
   };
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  /** The HTTP status, or 0 if the API couldn't be reached at all. */
+  constructor(message: string, readonly status = 0) {
+    super(message);
+  }
+}
+
+/** The API wants a login (a password is set and this browser has no session). */
+export const needsLogin = (e: unknown) => e instanceof ApiError && e.status === 401;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -76,9 +84,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError("Can't reach the API");
   }
-  if (!res.ok) throw new ApiError(`${path} returned ${res.status}`);
+  if (!res.ok) {
+    // The API explains refusals in plain language ("Wrong password."); show that.
+    const detail = await res.json().then((b) => b?.detail, () => null);
+    throw new ApiError(typeof detail === "string" ? detail : `${path} returned ${res.status}`, res.status);
+  }
   return res.json();
 }
+
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export interface AuthStatus {
+  password_set: boolean;
+  logged_in: boolean;
+  /** No password yet, and the dashboard is reachable from this machine only. */
+  setup_allowed: boolean;
+}
+
+export const fetchAuthStatus = () => request<AuthStatus>("/auth/status");
+export const logIn = (password: string) => post<{ ok: boolean }>("/auth/login", { password });
+export const logOut = () => post<{ ok: boolean }>("/auth/logout", {});
+export const setUpPassword = (password: string) => post<{ ok: boolean }>("/auth/setup", { password });
+export const changePassword = (current: string, next: string) =>
+  post<{ ok: boolean }>("/auth/password", { current, new: next });
 
 export const fetchHealth = () => request<Health>("/health");
 
@@ -101,18 +134,10 @@ export const fetchTopIPs = (hours: number, limit = 8) =>
 
 /** Give a device a friendly name; null or "" removes it. */
 export const nameDevice = (ip: string, name: string | null) =>
-  request<{ ip: string; name: string | null }>("/devices/name", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ip, name }),
-  });
+  post<{ ip: string; name: string | null }>("/devices/name", { ip, name });
 
 /** Mark alerts reviewed (or unreviewed) by id, or every match of a filter. */
 export const reviewAlerts = (
   body: { reviewed?: boolean } & ({ ids: number[] } | { hours: number; severity?: Severity }),
 ) =>
-  request<{ updated: number }>("/alerts/review", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  post<{ updated: number }>("/alerts/review", body);

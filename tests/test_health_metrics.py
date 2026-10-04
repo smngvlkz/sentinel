@@ -17,15 +17,8 @@ from analysis_service.tables import TableReport, Tables
 from capture_service.capture import STATS_KEY, write_stats
 from capture_service.names import NameExtractor
 
-if "dashboard_api_main" in sys.modules:  # already loaded by test_dashboard_api.py
-    api = sys.modules["dashboard_api_main"]
-else:
-    _spec = importlib.util.spec_from_file_location(
-        "dashboard_api_main", os.path.join(os.path.dirname(__file__), "..", "dashboard-api", "main.py")
-    )
-    api = importlib.util.module_from_spec(_spec)
-    sys.modules[_spec.name] = api
-    _spec.loader.exec_module(api)
+# The same way uvicorn loads it (dashboard-api.main), so its relative imports work.
+api = importlib.import_module("dashboard-api.main")
 
 
 def pkt(t, src, dst="192.168.1.10", sport=1000, dport=80):

@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import AccountControls from "@/components/AccountControls";
 import AlertDrawer from "@/components/AlertDrawer";
 import AlertTable, { type SeverityFilter, type StatusFilter } from "@/components/AlertTable";
 import GettingStarted from "@/components/GettingStarted";
+import LoginScreen from "@/components/LoginScreen";
 import Logo from "@/components/Logo";
 import ServiceStatus from "@/components/ServiceStatus";
 import StatsStrip from "@/components/StatsStrip";
@@ -15,13 +17,16 @@ import { Cmd } from "@/components/ui";
 import {
   fetchAlerts,
   fetchAlertSummary,
+  fetchAuthStatus,
   fetchHealth,
   fetchStats,
   fetchTopIPs,
   nameDevice,
+  needsLogin,
   reviewAlerts,
   type Alert,
   type AlertSummary,
+  type AuthStatus,
   type Health,
   type Stats,
   type TopIP,
@@ -53,11 +58,31 @@ export default function Dashboard() {
   const [tableSeverity, setTableSeverity] = useState<SeverityFilter>("all");
   const [tableStatus, setTableStatus] = useState<StatusFilter>("all");
   const [markingAll, setMarkingAll] = useState(false);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+
+  // Whether a password is set and this browser is logged in. Checked on load,
+  // after logging in or out, and whenever the API asks for a login.
+  const checkAuth = useCallback(async () => {
+    try {
+      setAuth(await fetchAuthStatus());
+    } catch {
+      // API unreachable: the offline message below already says so.
+    }
+  }, []);
+  const locked = Boolean(auth?.password_set && !auth.logged_in);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const refresh = useCallback(async () => {
     try {
       setHealth(await fetchHealth());
-    } catch {
+    } catch (e) {
+      if (needsLogin(e)) {
+        await checkAuth(); // the session ended or expired: back to the login screen
+        return;
+      }
       setHealth(null);
       setLoaded(true);
       return;
@@ -81,13 +106,14 @@ export default function Dashboard() {
     if (ips.status === "fulfilled") setTopIPs(ips.value.top_ips);
     setUpdatedAt(new Date().toISOString());
     setLoaded(true);
-  }, [hours, tableSeverity, tableStatus]);
+  }, [hours, tableSeverity, tableStatus, checkAuth]);
 
   useEffect(() => {
+    if (locked) return; // nothing to load until someone logs in
     refresh();
     const poll = setInterval(refresh, POLL_MS);
     return () => clearInterval(poll);
-  }, [refresh]);
+  }, [refresh, locked]);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -162,6 +188,8 @@ export default function Dashboard() {
     </div>
   );
 
+  if (locked) return <LoginScreen onLoggedIn={checkAuth} />;
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur">
@@ -179,6 +207,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-5">
             {loaded && <ServiceStatus health={health} />}
+            {auth && <AccountControls auth={auth} onChange={checkAuth} />}
             <ThemeToggle />
           </div>
         </div>

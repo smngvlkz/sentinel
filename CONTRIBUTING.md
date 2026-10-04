@@ -59,6 +59,7 @@ make build
 ## Where things live
 
 - **Detection logic:** `detection_engine/`. Features come from `analysis_service/`: `feature_extractor.py` for one-way flows, and `connections.py` for two-way connections and per-host activity over 10- and 60-second windows.
+- **API endpoints are protected by default.** Once a password is set, every endpoint needs a login: `require_login` in `dashboard-api/main.py` applies to the whole app. Only `PUBLIC_PATHS` (what the login screen needs) work without one; think twice before adding to it. Endpoints that change data also need `dependencies=[Depends(require_trusted_request)]`, the guard against posts from other websites. `tests/test_auth.py` checks every endpoint refuses requests without a login; add new endpoints to its list.
 - **Database schema:** numbered SQL files in `database/migrations/`, applied in order by `common/migrations.py` when the analyzer and API start (whichever starts first applies them; the other waits on a lock). To change the schema, add the next file, e.g. `0003_add_x.sql`. Never edit one that has shipped: installs that already ran it won't run it again. `tests/test_migrations.py` runs them against a real Postgres when `SENTINEL_TEST_DATABASE_URL` is set (CI sets it), including upgrades from the schemas that shipped in 0.1.0 and 0.4.0; when you add a migration, check an upgrade keeps existing alerts.
 - **Demo traffic:** `scripts/simulate_attack.py`.
 
