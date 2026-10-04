@@ -18,6 +18,14 @@ uses [Semantic Versioning](https://semver.org/).
   row lock logins for a minute, doubling up to 15 minutes. Stored as an
   argon2id hash; sessions as SHA-256 hashes of their tokens. Without a
   password, the dashboard works exactly as before.
+- Opening the dashboard from other devices (roadmap 1.3). Set
+  `DASHBOARD_BIND=0.0.0.0` in `.env` and other devices can open it at this
+  machine's address. Only the dashboard's port opens; the API, Postgres and
+  Redis stay on this machine. It needs a password: without one the API
+  refuses to start, and logs why. `make password` now works while the API
+  is down, and restarts it afterwards. The README's SSH-tunnel advice is
+  replaced by a guide to reaching the dashboard from anywhere with
+  Tailscale.
 
 ### Changed
 

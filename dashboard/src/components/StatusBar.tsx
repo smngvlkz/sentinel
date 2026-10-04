@@ -44,7 +44,8 @@ export default function StatusBar({ health, stats, hours, now, onReview, childre
     title = "Can't reach the SentinelAI API";
     detail = (
       <>
-        Start the services with <Cmd>make up</Cmd> or check them with <Cmd>make status</Cmd>.
+        Start the services with <Cmd>make up</Cmd> or check them with <Cmd>make status</Cmd>. If other devices
+        can open the dashboard, the API won&apos;t start until a password is set: run <Cmd>make password</Cmd>.
       </>
     );
   } else if (!health.services.database.ok || !health.services.redis.ok) {

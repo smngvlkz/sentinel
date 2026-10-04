@@ -4,6 +4,8 @@
 COMPOSE := docker compose -f docker/docker-compose.yml $(if $(wildcard .env),--env-file .env)
 PY := .venv/bin/python
 UI_URL := http://localhost:$(or $(DASHBOARD_UI_PORT),3001)
+# Set when DASHBOARD_BIND lets other devices open the dashboard.
+EXPOSED := $(filter-out 127.0.0.1 localhost ::1,$(strip $(DASHBOARD_BIND)))
 
 .DEFAULT_GOAL := help
 .PHONY: help demo demo-stop up down password restart logs status build capture setup setup-env setup-python \
@@ -42,6 +44,10 @@ up: .env ## Start Redis, Postgres, analyzer, API and dashboard
 	$(COMPOSE) up -d --build
 	@echo ""
 	@echo "Dashboard: $(UI_URL)"
+ifneq ($(EXPOSED),)
+	@echo "Other devices can open it too, at this machine's address, port $(or $(DASHBOARD_UI_PORT),3001)."
+	@echo "If you haven't set a password yet, it won't start until you run: make password"
+endif
 	@echo "Next, start packet capture in another terminal: make capture"
 
 capture: ## Capture live packets from CAPTURE_INTERFACE (asks for sudo)
@@ -51,8 +57,11 @@ capture: ## Capture live packets from CAPTURE_INTERFACE (asks for sudo)
 down: ## Stop all services
 	$(COMPOSE) --profile demo down
 
-password: ## Set or reset the dashboard password (also logs everyone out)
-	$(COMPOSE) exec dashboard-api python -m dashboard-api.set_password
+# A one-off container, so it works while the API is refusing to start for want
+# of a password; the restart then lets the API start without waiting.
+password: .env ## Set or reset the dashboard password (also logs everyone out)
+	$(COMPOSE) run --rm dashboard-api python -m dashboard-api.set_password
+	@$(COMPOSE) restart dashboard-api >/dev/null 2>&1 || true
 
 restart: ## Restart the analyzer (after editing config or training a model)
 	$(COMPOSE) restart analyzer

@@ -241,6 +241,71 @@ class TestChangeAndReset:
         assert fresh.get("/devices").json()["devices"][0]["name"] == "Office NAS"
 
 
+class TestOpeningToOtherDevices:
+    """DASHBOARD_BIND beyond this machine needs a password: the API won't start without one."""
+
+    def test_refuses_to_start_without_a_password(self, app, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setenv("DASHBOARD_BIND", "0.0.0.0")
+        with pytest.raises(RuntimeError, match="make password"):
+            with TestClient(api.app):  # runs startup, as uvicorn does
+                pass
+
+    def test_starts_once_a_password_is_set(self, app, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        new_client, _, _ = app
+        set_up(new_client())
+        monkeypatch.setenv("DASHBOARD_BIND", "0.0.0.0")
+        with TestClient(api.app) as c:
+            assert c.get("/alerts").status_code == 401
+            assert post(c, "/auth/login", {"password": PASSWORD}).status_code == 200
+            assert c.get("/alerts").status_code == 200
+
+    @pytest.mark.parametrize("bind", ["127.0.0.1", "localhost", "::1", None])
+    def test_starts_without_a_password_on_this_machine_only(self, app, monkeypatch, bind):
+        from fastapi.testclient import TestClient
+
+        if bind:
+            monkeypatch.setenv("DASHBOARD_BIND", bind)
+        with TestClient(api.app) as c:
+            assert c.get("/alerts").status_code == 200
+
+    def test_a_password_removed_while_running_shuts_everything(self, app, monkeypatch):
+        new_client, cur, _ = app
+        c = set_up(new_client())
+        monkeypatch.setenv("DASHBOARD_BIND", "0.0.0.0")
+        cur.execute("DELETE FROM admin_password")
+        r = c.get("/alerts")
+        assert r.status_code == 503 and "make password" in r.json()["detail"]
+        assert new_client().get("/devices").status_code == 503
+
+    def test_only_the_dashboards_port_follows_the_setting(self):
+        """The API, Postgres and Redis stay on this machine whatever DASHBOARD_BIND says."""
+        path = os.path.join(os.path.dirname(__file__), "..", "docker", "docker-compose.yml")
+        ports = [line.strip() for line in open(path) if line.strip().startswith('- "') and ":" in line]
+        assert '- "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_UI_PORT:-3001}:3000"' in ports
+        others = [p for p in ports if "DASHBOARD_UI_PORT" not in p]
+        assert len(others) == 3 and all(p.startswith('- "127.0.0.1:') for p in others), others
+
+
+def test_starts_while_the_database_is_down(monkeypatch):
+    """So /health can say so; every other request is refused until it's back."""
+    import psycopg2
+    from fastapi.testclient import TestClient
+
+    @contextlib.contextmanager
+    def down():
+        raise psycopg2.OperationalError("connection refused")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(api, "get_db", down)
+    monkeypatch.setenv("DASHBOARD_BIND", "0.0.0.0")
+    with TestClient(api.app) as c:
+        assert c.get("/alerts").status_code == 503
+
+
 def test_database_down_refuses_everything_but_health(monkeypatch):
     """Without the database a login can't be checked: refuse, except /health, which reports the outage."""
     import psycopg2
