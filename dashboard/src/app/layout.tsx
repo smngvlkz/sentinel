@@ -1,16 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const inter = Inter({
+// Shipped in ./fonts (Latin subsets, from Fontsource; licences beside them)
+// rather than fetched from Google Fonts on every build, which made builds
+// need the internet and failed at random when Google served a font URL
+// Next.js couldn't parse.
+const inter = localFont({
   variable: "--font-inter",
-  subsets: ["latin"],
+  src: "./fonts/inter-latin-wght-normal.woff2",
+  weight: "100 900",
 });
 
-const jetbrains = JetBrains_Mono({
+const jetbrains = localFont({
   variable: "--font-jetbrains",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  src: [
+    { path: "./fonts/jetbrains-mono-latin-400-normal.woff2", weight: "400" },
+    { path: "./fonts/jetbrains-mono-latin-500-normal.woff2", weight: "500" },
+  ],
 });
 
 export const metadata: Metadata = {

@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.5.0",
+  version: "0.6.0",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -165,7 +165,7 @@ export const features: Feature[] = [
     tag: "Privacy",
     icon: "lock",
     title: "Private by design",
-    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on 127.0.0.1 only. No account, no cloud.",
+    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on this machine only, unless you set a password and open the dashboard to your phone. No account, no cloud.",
   },
   {
     tag: "Demo",
@@ -237,6 +237,10 @@ export const faqs: Faq[] = [
   {
     q: "How do I see my whole network, not just one computer?",
     a: "On its own, SentinelAI sees the traffic of the machine it runs on. To see every device, give it a copy of the traffic: a managed switch with port mirroring (about $30–60) is the simplest and safest; a Raspberry Pi set up as a bridge between your router and your network sees everything but becomes a single point of failure; some routers can capture traffic themselves.",
+  },
+  {
+    q: "Can I check it from my phone?",
+    a: "Yes. Set a password, set DASHBOARD_BIND=0.0.0.0, and open the dashboard at your computer's address. Away from home, use Tailscale, a free private network between your own devices, rather than opening a port on your router. The README has the steps.",
   },
   {
     q: "Is it ready to rely on?",
