@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-04
+
 ### Added
 
 - Old alerts are deleted automatically, so the database can't fill the
@@ -28,6 +30,20 @@ uses [Semantic Versioning](https://semver.org/).
 - Alert ids are now 64-bit. They were 32-bit, which runs out at about 2.1
   billion and never reuses ids. The first start after upgrading rewrites the
   alerts table once.
+
+### Known limitations
+
+- Deleted alerts are gone for good; there's no export or archive yet. Raise
+  `max_age_days` or `max_alerts` under `[retention]` to keep more.
+- Postgres reuses the space freed by deleted alerts rather than giving it
+  back to the operating system, so the database stays about the size of
+  the limit, not smaller.
+- Retention runs inside the analyzer: while the analyzer is stopped, nothing
+  is deleted (and nothing new is stored either).
+- The limitations listed for 0.4.0 that aren't about the database still
+  apply: a fast enough flood can still hide a slow scan, packets dropped by
+  the kernel aren't reported, and the API has no authentication, so keep it
+  on localhost.
 
 ## [0.4.0] - 2026-10-03
 
@@ -224,7 +240,8 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/smngvlkz/sentinel/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/smngvlkz/sentinel/compare/v0.1.0...v0.2.0

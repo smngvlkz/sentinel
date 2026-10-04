@@ -180,3 +180,26 @@ def test_large_cleanup_fits_dockers_shared_memory(db):
     keeper = Retention({}, 90, 500_000)
     assert keeper.run_once(conn) == (0, 500_000)  # deletes, then VACUUMs; must not raise
     assert count(cur) == 500_000
+
+
+def test_first_pass_checks_age_even_right_after_boot(monkeypatch):
+    """time.monotonic() counts from boot; the first pass must not wait an hour after a reboot."""
+    keeper = Retention({}, 90, 500_000)
+    passes = []
+
+    class Conn:
+        closed = False
+
+    monkeypatch.setattr(retention.psycopg2, "connect", lambda **_: Conn())
+    monkeypatch.setattr(retention.time, "monotonic", lambda: 120.0)  # two minutes after boot
+    monkeypatch.setattr(keeper, "run_once", lambda conn, check_age=True: passes.append(check_age))
+
+    class StopAfterOne:
+        def is_set(self):
+            return bool(passes)
+
+        def wait(self, _):
+            pass
+
+    keeper.loop(StopAfterOne())
+    assert passes == [True]
