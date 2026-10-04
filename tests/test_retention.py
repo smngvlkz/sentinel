@@ -129,15 +129,8 @@ def test_health_reports_database_size_and_oldest_alert(db):
     import contextlib
     import importlib.util
 
-    if "dashboard_api_main" in sys.modules:
-        api = sys.modules["dashboard_api_main"]
-    else:
-        spec = importlib.util.spec_from_file_location(
-            "dashboard_api_main", os.path.join(os.path.dirname(__file__), "..", "dashboard-api", "main.py")
-        )
-        api = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = api
-        spec.loader.exec_module(api)
+    # The same way uvicorn loads it (dashboard-api.main), so its relative imports work.
+    api = importlib.import_module("dashboard-api.main")
 
     conn, cur = db
     add_alerts(cur, 40, age_days=3)
