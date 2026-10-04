@@ -317,8 +317,9 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 
 The API has no authentication, so every port is bound to `127.0.0.1`. To view
 the dashboard from another device, use an SSH tunnel
-(`ssh -L 3001:localhost:3001 -L 8000:localhost:8000 your-server`) rather than
-exposing the ports.
+(`ssh -L 3001:localhost:3001 your-server`) rather than exposing the port. The
+dashboard reaches the API through its own address (`/api`), so the dashboard's
+port is the only one you need.
 
 ## Troubleshooting
 

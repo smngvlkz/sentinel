@@ -6,6 +6,16 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The dashboard reaches the API through its own address: the browser calls
+  `/api/...` on the dashboard, which forwards to the API inside Docker. Before,
+  the browser called `http://localhost:8000` directly, so the dashboard couldn't
+  load its data from any other device. Now the dashboard's port is the only one
+  that ever needs to be reachable, and the API's stays on this machine. The
+  check that refuses changes posted from other websites now accepts the
+  dashboard's own address, whatever it is, instead of a fixed list.
+
 ## [0.5.0] - 2026-10-04
 
 ### Added

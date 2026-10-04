@@ -82,7 +82,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.dashboard-ui
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:${DASHBOARD_PORT:-8000}
+        API_INTERNAL_URL: http://dashboard-api:8000
     ports:
       - "127.0.0.1:${DASHBOARD_UI_PORT:-3001}:3000"
     depends_on:
