@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 
 type Choice = "system" | "light" | "dark";
 
-const OPTIONS: { value: Choice; label: string }[] = [
-  { value: "system", label: "Auto" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+const OPTIONS: { value: Choice; label: string; Icon: typeof Sun }[] = [
+  { value: "system", label: "Auto", Icon: Monitor },
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
 ];
 
 function apply(choice: Choice) {
@@ -53,8 +54,22 @@ export default function ThemeToggle() {
     }
   };
 
+  const current = OPTIONS.find((o) => o.value === choice) ?? OPTIONS[0];
+  const after = OPTIONS[(OPTIONS.indexOf(current) + 1) % OPTIONS.length];
+
   return (
-    <div role="radiogroup" aria-label="Theme" className="flex rounded-lg border border-line bg-bg-3 p-0.5">
+    <>
+      {/* Phones: one button that steps Auto → Light → Dark, so the header fits. */}
+      <button
+        type="button"
+        onClick={() => select(after.value)}
+        aria-label={`Theme: ${current.label}. Switch to ${after.label}.`}
+        title={`Theme: ${current.label}`}
+        className="flex size-8 items-center justify-center rounded-lg border border-line text-fg-2 transition-colors duration-200 hover:bg-bg-2 hover:text-fg sm:hidden"
+      >
+        <current.Icon className="size-4" strokeWidth={1.75} aria-hidden />
+      </button>
+      <div role="radiogroup" aria-label="Theme" className="hidden rounded-lg border border-line bg-bg-3 p-0.5 sm:flex">
       {OPTIONS.map((o) => (
         <button
           key={o.value}
@@ -69,6 +84,7 @@ export default function ThemeToggle() {
           {o.label}
         </button>
       ))}
-    </div>
+      </div>
+    </>
   );
 }

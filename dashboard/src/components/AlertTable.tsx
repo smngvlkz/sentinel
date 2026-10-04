@@ -82,7 +82,7 @@ export default function AlertTable({
           type="button"
           onClick={onMarkAllReviewed}
           disabled={markingAll}
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1 text-xs font-medium text-fg-2 transition-colors duration-200 hover:bg-bg-2 hover:text-fg disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg sm:ml-auto sm:w-auto border border-line bg-bg px-2.5 py-1 text-xs font-medium text-fg-2 transition-colors duration-200 hover:bg-bg-2 hover:text-fg disabled:opacity-50"
         >
           <Check className="size-3.5" strokeWidth={2} aria-hidden />
           {markingAll ? "Marking…" : `Mark ${unreviewedHere.toLocaleString()} ${label}as reviewed`}
@@ -111,7 +111,7 @@ export default function AlertTable({
     );
   } else {
     body = (
-      <div className="max-h-[620px] overflow-auto">
+      <div className="md:max-h-[620px] md:overflow-auto">
         {/* Phones: one stacked row per alert. A five-column table can't fit. */}
         <ul className="md:hidden">
           {alerts.map((a) => {
@@ -139,11 +139,12 @@ export default function AlertTable({
                     <span className="mt-1 flex items-center gap-2">
                       <SeverityIndicator severity={info.severity} />
                     </span>
-                    <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-fg-2">
-                      <Endpoint alert={a} side="source" />
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-fg-muted">→</span>
-                        <Endpoint alert={a} side="destination" />
+                    {/* Source, then "→ destination" below it: the same two lines in every row. */}
+                    <span className="mt-1.5 flex flex-col gap-0.5 text-fg-2">
+                      <Endpoint alert={a} side="source" layout="inline" />
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="text-fg-muted" aria-label="to">→</span>
+                        <Endpoint alert={a} side="destination" layout="inline" />
                       </span>
                     </span>
                   </span>
@@ -271,17 +272,26 @@ function Segmented<T extends string>({
 }
 
 /** One address, or "63 internet sources" when that side of the alert is a crowd. */
-function Endpoint({ alert, side }: { alert: Alert; side: "source" | "destination" }) {
+function Endpoint({
+  alert,
+  side,
+  layout,
+}: {
+  alert: Alert;
+  side: "source" | "destination";
+  layout?: "stack" | "inline";
+}) {
   const crowd = crowdLabel(alert.threat_type, alert.features);
   if (crowd?.side === side) return <span className="text-[13px] font-medium">{crowd.text}</span>;
   return side === "source" ? (
-    <Address ip={alert.source_ip} name={alert.source_name} device={alert.source_device} />
+    <Address ip={alert.source_ip} name={alert.source_name} device={alert.source_device} layout={layout} />
   ) : (
     <Address
       ip={alert.destination_ip}
       port={alert.destination_port}
       name={alert.destination_name}
       device={alert.destination_device}
+      layout={layout}
     />
   );
 }
