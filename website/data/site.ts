@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.6.0",
+  version: "0.6.1",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
