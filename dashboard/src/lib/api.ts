@@ -1,6 +1,7 @@
 import type { Severity } from "./threats";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Same address as the dashboard; next.config.ts forwards /api to the API.
+const API_BASE = "/api";
 
 export interface Alert {
   id: number;
@@ -73,13 +74,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...init });
   } catch {
-    throw new ApiError(`Can't reach the API at ${API_BASE}`);
+    throw new ApiError("Can't reach the API");
   }
   if (!res.ok) throw new ApiError(`${path} returned ${res.status}`);
   return res.json();
 }
-
-export const API_URL = API_BASE;
 
 export const fetchHealth = () => request<Health>("/health");
 

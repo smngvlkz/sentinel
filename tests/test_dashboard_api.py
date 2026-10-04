@@ -98,6 +98,44 @@ class TestMutationGuard:
             api.check_mutation_headers("http://localhost:3001", "text/plain")
         assert e.value.status_code == 415
 
+    def test_dashboard_own_address_allowed_from_any_device(self):
+        """Through the dashboard's /api proxy: a phone or a Tailscale name, not in CORS_ORIGINS."""
+        api.check_mutation_headers("http://192.168.1.20:3001", "application/json", "192.168.1.20:3001")
+        api.check_mutation_headers("https://sentinel.tail1234.ts.net", "application/json", "Sentinel.Tail1234.ts.net")
+
+    def test_another_site_refused_even_with_a_forwarded_host(self):
+        with pytest.raises(api.HTTPException) as e:
+            api.check_mutation_headers("https://evil.example", "application/json", "192.168.1.20:3001")
+        assert e.value.status_code == 403
+
+    def test_other_sites_cannot_send_their_own_forwarded_host(self):
+        """
+        The guard trusts X-Forwarded-Host, so a page on another site must not be
+        able to send it straight to the API: the CORS preflight has to refuse it.
+        """
+        from fastapi.testclient import TestClient
+
+        preflight = TestClient(api.app).options(
+            "/devices/name",
+            headers={
+                "Origin": "https://evil.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type, x-forwarded-host",
+            },
+        )
+        assert preflight.status_code == 400
+        assert "access-control-allow-origin" not in preflight.headers
+        # Even the dashboard's configured origin may not send it directly.
+        own = TestClient(api.app).options(
+            "/devices/name",
+            headers={
+                "Origin": "http://localhost:3001",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type, x-forwarded-host",
+            },
+        )
+        assert own.status_code == 400
+
 
 class TestDeviceNameRequest:
 

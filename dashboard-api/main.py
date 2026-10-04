@@ -15,6 +15,7 @@ import os
 import time
 from contextlib import contextmanager
 from typing import Any, Generator, Literal
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -167,21 +168,32 @@ def alert_filter(
     return " AND ".join(clauses), params
 
 
-def check_mutation_headers(origin: str | None, content_type: str | None) -> None:
+def _same_host(origin: str, forwarded_host: str | None) -> bool:
+    return bool(forwarded_host) and urlsplit(origin).netloc.lower() == forwarded_host.lower()
+
+
+def check_mutation_headers(
+    origin: str | None, content_type: str | None, forwarded_host: str | None = None
+) -> None:
     """
-    Guard for endpoints that change data. The API has no authentication, so
-    without this any web page open in the browser could post to localhost and
-    mark alerts as reviewed. Browsers always send Origin on cross-site POSTs,
-    and requiring JSON forces a CORS preflight that other origins fail.
+    Guard for endpoints that change data: a page on another site, open in the
+    same browser, mustn't be able to post here. Browsers always send Origin on
+    cross-site POSTs. Allowed origins are the dashboard's own address (it
+    forwards /api here and passes on the address it was loaded from as
+    X-Forwarded-Host, overwriting any the browser sent) and CORS_ORIGINS.
+    Requiring JSON forces a CORS preflight, which other origins fail, so they
+    can't send X-Forwarded-Host themselves either.
     """
-    if origin is not None and origin not in ALLOWED_ORIGINS:
+    if origin is not None and origin not in ALLOWED_ORIGINS and not _same_host(origin, forwarded_host):
         raise HTTPException(status_code=403, detail="Origin not allowed")
     if not (content_type or "").startswith("application/json"):
         raise HTTPException(status_code=415, detail="Content-Type must be application/json")
 
 
 def require_trusted_request(request: Request) -> None:
-    check_mutation_headers(request.headers.get("origin"), request.headers.get("content-type"))
+    check_mutation_headers(
+        request.headers.get("origin"), request.headers.get("content-type"), request.headers.get("x-forwarded-host")
+    )
 
 
 def _check_database() -> dict[str, Any]:
