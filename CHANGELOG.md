@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-04
+
 ### Added
 
 - A dashboard password (roadmap 1.3). Set it from the dashboard
@@ -25,7 +27,8 @@ uses [Semantic Versioning](https://semver.org/).
   refuses to start, and logs why. `make password` now works while the API
   is down, and restarts it afterwards. The README's SSH-tunnel advice is
   replaced by a guide to reaching the dashboard from anywhere with
-  Tailscale.
+  Tailscale, tested from a phone on mobile data. Setting `DASHBOARD_BIND`
+  to the machine's Tailscale address instead allows Tailscale devices only.
 
 ### Changed
 
@@ -47,6 +50,23 @@ uses [Semantic Versioning](https://semver.org/).
   lines (name and time, severity, source, "→ destination"), the alert list
   scrolls with the page instead of in a box that cut it off mid-row, and
   "Mark as reviewed" spans the width under the filters.
+
+### Known limitations
+
+- One password for everyone: no separate accounts, and no record of who
+  did what.
+- No HTTPS of its own. Over Tailscale everything is encrypted between your
+  devices, but on your own Wi-Fi the dashboard is plain `http://`, so a
+  hostile device on the same network could read the password as you log in.
+  Use Tailscale if you don't trust every device on your network.
+- With `DASHBOARD_BIND` set to the Tailscale address, if Tailscale isn't
+  connected when SentinelAI starts (after a reboot, say), the dashboard
+  stays down until `make up` is run again. `0.0.0.0` doesn't have this
+  problem.
+- Until a password is set, the dashboard is open to anyone using this
+  machine, as before.
+- From earlier releases: a fast enough flood can still hide a slow scan, and
+  packets dropped by the kernel aren't reported.
 
 ## [0.5.0] - 2026-10-04
 
@@ -282,7 +302,8 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/smngvlkz/sentinel/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/smngvlkz/sentinel/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/smngvlkz/sentinel/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/smngvlkz/sentinel/compare/v0.2.0...v0.3.0
