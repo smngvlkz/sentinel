@@ -236,7 +236,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "How do I see my whole network, not just one computer?",
-    a: "On its own, SentinelAI sees the traffic of the machine it runs on. To see every device, give it a copy of the traffic: a managed switch with port mirroring (about $30–60) is the simplest and safest; a Raspberry Pi set up as a bridge between your router and your network sees everything but becomes a single point of failure; some routers can capture traffic themselves.",
+    a: "On its own, SentinelAI sees the traffic of the machine it runs on. To see every device, give it a copy of the traffic: a managed switch with port mirroring (about R350–R1,000) is the simplest and safest; a Raspberry Pi set up as a bridge between your router and your network sees everything but becomes a single point of failure; some routers can capture traffic themselves.",
   },
   {
     q: "Can I check it from my phone?",

@@ -174,7 +174,7 @@ dashboard showing every device on someone's network.
 
 Capture options, documented in order of recommendation:
 
-1. **Port mirroring on a managed switch** (about $30–60, e.g. TP-Link
+1. **Port mirroring on a managed switch** (about R350–R1,000, e.g. TP-Link
    TL-SG105E or Netgear GS305E). The router's uplink is mirrored to the port
    the SentinelAI machine is plugged into.
    - Passive: if SentinelAI dies, the network keeps working.
