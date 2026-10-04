@@ -185,10 +185,29 @@ def require_trusted_request(request: Request) -> None:
 
 
 def _check_database() -> dict[str, Any]:
+    """
+    Reachable, and how big: size on disk, roughly how many alerts (Postgres's
+    estimate; counting exactly on every health check would scan the table),
+    and when the oldest kept alert is from. Retention keeps all three bounded.
+    """
     try:
         with get_db() as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        return {"ok": True}
+            cur.execute(
+                """SELECT pg_database_size(current_database()),
+                          (SELECT reltuples::bigint FROM pg_class WHERE relname = 'alerts'),
+                          (SELECT min(timestamp) FROM alerts)"""
+            )
+            size, estimate, oldest = cur.fetchone()
+            if estimate is None or estimate < 0:
+                # Never analyzed yet (a new install): small, so count exactly.
+                cur.execute("SELECT count(*) FROM alerts")
+                estimate = cur.fetchone()[0]
+        return {
+            "ok": True,
+            "size_bytes": size,
+            "alerts_estimate": estimate,
+            "oldest_alert": oldest.isoformat() if oldest else None,
+        }
     except psycopg2.Error as e:
         log.warning("health: database check failed: %s", e)
         return {"ok": False, "error": "Cannot reach PostgreSQL"}

@@ -46,6 +46,8 @@ DEFAULTS: dict[str, dict[str, float]] = {
         "max_alert_cooldowns": 10_000,
         "max_judged_flows": 50_000,
     },
+    # Old alerts are deleted so the database can't fill the disk; see config/detection.toml.
+    "retention": {"max_age_days": 90, "max_alerts": 500_000},
 }
 
 

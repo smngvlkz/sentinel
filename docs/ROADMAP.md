@@ -108,6 +108,11 @@ what they do.
 
 ### 1.2 Data retention (added)
 
+**Status:** done for 0.5.0. Migrations, deletion by age and by count, and
+database size on `/health` are in. Measured: 500,000 alerts take about
+711 MB; repeated floods of that many leave the table the same size, because
+each pass VACUUMs and the space is reused.
+
 **Scope**
 - Delete alerts older than a configurable age (default 90 days).
 - Cap total alert rows as a backstop.

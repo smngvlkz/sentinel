@@ -27,6 +27,7 @@ from common.flags import env_flag
 from detection_engine.config import load_config
 from detection_engine.detector import DetectionEngine
 from alert_service.alert_manager import AlertManager
+from alert_service.retention import Retention
 
 load_dotenv()
 
@@ -175,6 +176,8 @@ def main() -> None:
     tracker = FlowTracker(limits=config["limits"])
     detector = DetectionEngine()
     alerts = AlertManager()
+    retention = config["retention"]
+    Retention(alerts.dsn, retention["max_age_days"], retention["max_alerts"]).start()
 
     started_at = time.time()
     last_cleanup = started_at
