@@ -85,6 +85,7 @@ def syn_flood_features():
         "src_connection_count": 1,
         "syn_count": 190,
         "syn_ratio": 0.95,
+        "unfinished_syns": 180,
     }
 
 

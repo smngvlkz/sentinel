@@ -140,9 +140,9 @@ FastAPI ──── Next.js dashboard
 
 | Alert | Fires when | Default |
 |-------|------------|---------|
-| Connection flood (`SYN_FLOOD`) | Most packets in a flow are connection requests, arriving fast | > 80% SYN and > 50 packets/s |
+| Connection flood (`SYN_FLOOD`) | Most packets in a flow are connection requests, arriving fast, and they never complete | > 80% SYN, > 50 packets/s, and ≥ 10 requests unfinished after 1 s |
 | Port scan (`PORT_SCAN`) | One source tries to connect to many ports on one host that never answer | > 20 ports |
-| Traffic burst (`HIGH_FREQUENCY`) | A flood of small packets outside an established TCP connection | > 1,000 packets/s, average < 300 bytes |
+| Traffic burst (`HIGH_FREQUENCY`) | A flood of small packets outside an established TCP connection, kept up for a second | > 1,000 packets/s for ≥ 1 s, average < 300 bytes |
 | Oversized packet (`LARGE_PAYLOAD`) | A packet far larger than any network carries, outside an established TCP connection | > 10,000 bytes |
 | Request flood (`REQUEST_FLOOD`) | One source opening completed connections to one service very fast, e.g. an HTTP flood | > 400 in 10 s |
 | Distributed flood (`DISTRIBUTED_FLOOD`) | Many internet hosts connecting to one of your devices at once | > 50 sources in 60 s |

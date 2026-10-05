@@ -35,10 +35,14 @@ class RuleEngine:
         return has_rate_evidence(f, self.config)
 
     def _syn_flood(self, f: dict[str, float]) -> bool:
+        # Only connection requests left unfinished count: a browser opening
+        # a dozen connections at once looks the same for the first round
+        # trip, but completes every one.
         c = self.config["syn_flood"]
         return (
             f["syn_ratio"] > c["min_syn_ratio"]
             and f["packet_rate"] > c["min_packet_rate"]
+            and f.get("unfinished_syns", 0) >= c["min_unfinished"]
             and self._has_rate_evidence(f)
         )
 
@@ -58,11 +62,14 @@ class RuleEngine:
         # Rate alone can't tell a flood from a download. Floods are many small
         # packets outside an established connection; downloads are large
         # packets, and their return traffic is mostly TCP ACKs.
+        # It also has to last: directory and DNS lookups to an office server
+        # come in bursts of a tenth of a second at the same rate.
         c = self.config["high_frequency"]
         return (
             f["packet_rate"] > c["min_packet_rate"]
             and f["avg_packet_size"] < c["max_avg_packet_size"]
             and f["ack_ratio"] < c["max_ack_ratio"]
+            and f["flow_duration"] >= c["min_seconds"]
             and self._has_rate_evidence(f)
         )
 

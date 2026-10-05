@@ -13,6 +13,13 @@
 min_syn_ratio = 0.8
 # Packets per second within the flow.
 min_packet_rate = 50
+# Connection requests the source never completed, counted once they're
+# older than handshake_seconds. A browser opening a dozen connections at
+# once completes them all within a round trip; a flood never does.
+min_unfinished = 10
+# How long a connection request has to complete its handshake. Raise it on
+# a very slow link (satellite) if real connections take longer.
+handshake_seconds = 1.0
 
 [port_scan]
 # Distinct ports on one host that one source tried to connect to (bare SYNs)
@@ -35,6 +42,10 @@ min_packet_rate = 1000
 max_avg_packet_size = 300
 # Fraction of packets that are TCP ACKs; established transfers are mostly ACKs.
 max_ack_ratio = 0.5
+# How long the flow has to keep that rate up. Lookups to a busy DNS or
+# directory server come in bursts of a tenth of a second at the same rate;
+# a flood lasts longer.
+min_seconds = 1.0
 
 [request_flood]
 # One source opening completed TCP connections to one service (host and

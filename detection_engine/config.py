@@ -19,10 +19,10 @@ log = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "detection.toml")
 
 DEFAULTS: dict[str, dict[str, float]] = {
-    "syn_flood": {"min_syn_ratio": 0.8, "min_packet_rate": 50},
+    "syn_flood": {"min_syn_ratio": 0.8, "min_packet_rate": 50, "min_unfinished": 10, "handshake_seconds": 1.0},
     "port_scan": {"min_unique_ports": 20},
     "large_payload": {"min_packet_size": 10_000},
-    "high_frequency": {"min_packet_rate": 1000, "max_avg_packet_size": 300, "max_ack_ratio": 0.5},
+    "high_frequency": {"min_packet_rate": 1000, "max_avg_packet_size": 300, "max_ack_ratio": 0.5, "min_seconds": 1.0},
     "request_flood": {"min_new_connections_10s": 400},
     "distributed_flood": {"min_external_sources_60s": 50},
     "network_sweep": {"min_local_hosts_60s": 20},

@@ -33,7 +33,7 @@ dataset of real traffic with labelled attacks.
 
 ## Results on CIC-IDS2017
 
-Three days of the dataset, each replayed in full with the detection rules:
+Five days of the dataset, each replayed in full with the detection rules:
 
 - **Friday** (9.9 million packets): port scan, HTTP flood, botnet. Several
   thresholds were tuned on this day, so its numbers are optimistic.
@@ -43,6 +43,14 @@ Three days of the dataset, each replayed in full with the detection rules:
   This is the fair test.
 - **Monday** (11.6 million packets): no attacks at all, so every alert is a
   false alarm. Held out the same way, with the same frozen thresholds.
+- **Tuesday** (11.5 million packets) and **Thursday** (9.2 million packets):
+  untouched until 0.6.2, then used once to validate the connection-flood
+  fix. It **failed** the target set before the run; see below.
+
+The Friday, Wednesday and Monday sections were measured before 0.6.2. The
+connection-flood and traffic-burst false alarms they describe are gone since
+then (see "All five days with 0.6.2's rules" below); everything else in them
+still applies.
 
 **How it's scored.** Each labelled flow (one row in the dataset's CSV) counts
 as detected if SentinelAI alerted on that connection *while that flow was
@@ -95,9 +103,8 @@ What caused the 17 false alarms:
   within a fraction of a second, the way browsers load pages. The server
   answered every one, but the
   rule only looks at the burst of connection requests, not whether they
-  were answered. Requiring unanswered requests, as the port-scan rule
-  already does, should remove these; it isn't done yet, because changing a
-  rule after seeing its test results would make this test no longer fair.
+  were answered. Fixed in 0.6.2, and validated on days not used to design
+  the fix: see Tuesday and Thursday below.
 - **Traffic-burst rule (3), on two workstations and the domain
   controller:** bursts of DNS lookups, up to about 340 a second, from two
   workstations to the office DNS server.
@@ -199,8 +206,141 @@ the rest: 1,306 flows (0.28%) and 0.23% of normal minutes flagged.
 
 **What's still untested.** Monday and Wednesday have now shaped decisions,
 so any fix made from here (to the check-in rule or the DNS bursts) can't be
-fairly tested on them. Tuesday and Thursday haven't been looked at, and are
-kept for validating fixes.
+fairly tested on them. Tuesday and Thursday were kept for validating fixes,
+and have now been used (below).
+
+### Tuesday and Thursday: validating the connection-flood fix (failed)
+
+**The fix (0.6.2).** Every high-severity false alarm on Friday, Wednesday
+and Monday came from the connection-flood rule, and every one, when the
+packets were examined, was a browser opening 9 to 23 connections to one
+internet web server at once. The server answered all of them, but its
+answers took 77 to 290 ms to come back, and the rule decided after 0.1
+seconds, before most had arrived. The rule now counts only connection
+requests still unfinished after a second (`handshake_seconds`), and needs
+at least 10 of them (`min_unfinished`). A flood is reported about a second
+in, instead of at 0.1 s, and one that stops within a second isn't reported.
+
+**The test, set before running it.** Tuesday and Thursday hadn't been
+opened. Before either was replayed, with the code's checksums recorded, the
+targets were fixed as:
+
+1. Across both days, no normal machine gets more than 1 high-severity false
+   alarm.
+2. No attack type's detection rate drops by more than 0.5 percentage points
+   against the previous rule.
+
+Both days were replayed with the old and the new rule, scored against the
+dataset's labels as published, with no host pairs left out.
+
+**Result: target 2 passes, target 1 fails.**
+
+| | Old rule | New rule |
+|---|---:|---:|
+| Tuesday: normal machines with a high-severity false alarm | 3 | **1** |
+| Tuesday: connection-flood false alarms (flows) | 14 | **0** |
+| Thursday: normal machines with a high-severity false alarm | 12 | **10** |
+| Thursday: connection-flood alerts | 52 | 34 |
+| …from browser bursts | 5 | **0** |
+| …from the infected machine scanning the network (below) | 46 | 33 |
+| …from `172.16.0.1` to `192.168.10.51`, unexplained | 1 | 1 |
+| Attack detection per flow, both days | | **identical** |
+
+Target 2 passes, but weakly: no rule catches Tuesday's labelled attacks
+(FTP and SSH password guessing) or Thursday's (web attacks and the
+infiltration) in either version, so there was little detection to lose.
+
+**Why target 1 fails.** Thursday afternoon is an infiltration attack. The
+dataset's description says that once the Windows Vista machine
+(`192.168.10.8`) was infected, it ran a port scan and Nmap against all the
+other clients. The labels mark only 36 flows of the infiltration as attacks,
+so that scan is labelled normal. 33 of the 34 connection-flood alerts the new
+rule raises on Thursday are that scan, between 14:33 and 15:42, from `.8` to
+eight other machines. They are real attack traffic, and a rule that met
+target 1 on these labels would have to stay silent during a real network
+scan. Counting the scan as an attack, target 1 would pass: one machine on
+each day with a single high-severity alert.
+
+But that reading was only made after seeing the results, so it doesn't
+count: **the fix failed the target it was set**. It ships in 0.6.2 anyway,
+because it removed every browser-burst false alarm on all five days without
+losing a detection. What the target was guarding, notifications for
+high-severity alerts, stays blocked until a fix passes a validation on data
+it hasn't seen.
+
+**The lesson.** The target should have been written against the dataset's
+documented attack schedule, not only its labels. Earlier days had already
+shown that the labels miss attack traffic (the host pairs left out on Friday
+and Wednesday), and Thursday's infiltration scan is described on the
+dataset's own page. The next validation will state its targets that way
+from the start.
+
+**Infiltration caught.** The labels score Thursday's infiltration at 0%,
+but SentinelAI did flag it: the infected machine scanning the network raised
+55 port-scan alerts and, with the new rule, 33 connection-flood alerts, all
+between 14:33 and 15:42. On the labels these count as false alarms; they're
+the infiltration's second step.
+
+**Also on these days:** traffic-burst alerts (medium severity) between
+workstations and the office server, the pattern Wednesday and Monday showed,
+and one request-flood alert from a workstation on Tuesday, the only
+high-severity false alarm on either day outside the infiltration. The
+traffic-burst alerts were fixed afterwards (next section).
+
+The five old-rule browser-burst alerts on Thursday were checked the same
+way as on the other days: every connection request was answered and
+completed within 3 seconds, with round trips of 107 to 154 ms.
+
+### All five days with 0.6.2's rules
+
+After the validation above, two more problems turned up, both fixed in
+0.6.2. **Neither fix is validated.** Both were designed after Tuesday and
+Thursday had been run, and the traffic-burst threshold below was chosen
+after looking at those two days' alerts as well as Wednesday's and Monday's
+(most of the bursts examined were on Tuesday). So Tuesday and Thursday are
+as used up for these fixes as the other three days, and the numbers below
+show what changed, not a fresh test.
+
+- **Repeated floods were missed.** The rate rules average over a flow's
+  life. A flow idle past its 30-second timeout was only cleared if the
+  once-a-minute cleanup happened to run during the gap, so a flood that
+  repeats every minute (like `make demo`'s) was caught 2 to 4 times in 10
+  minutes, depending on timing. The same averaging hid bursts on long-lived
+  flows. A flow idle past the timeout now starts afresh on its next packet:
+  the demo's flood is caught every minute.
+- **Traffic-burst false alarms.** With bursts no longer averaged away, the
+  traffic-burst rule's false alarms showed up properly, and every one on the
+  five days was the same thing: a workstation and the office server
+  (`192.168.10.3`) exchanging a burst of directory and DNS lookups (LDAP,
+  global catalog, DNS), 120 to 220 packets in 0.10 to 0.17 seconds, answered
+  by the server. Real floods last longer (Friday's lasted 1.3 s), so a
+  traffic burst now has to keep its rate up for a second (`min_seconds`).
+  The one-second figure was picked from these alerts, on all five days,
+  after the validation runs.
+
+**Per machine, as the dashboard shows it on the default settings** (check-in
+rule off), old rules against 0.6.2's:
+
+| | Friday | Wednesday | Monday | Tuesday | Thursday |
+|---|---:|---:|---:|---:|---:|
+| Normal machines with a false alarm | 6 → **0** | 6 → **0** | 7 → **0** | 5 → **1** | 13 → 12 |
+| …with a high-severity one | 4 → **0** | 3 → **0** | 3 → **0** | 3 → **1** | 12 → 10 |
+| All alerts on the day | 53 → 38 | 38 → 29 | 15 → **0** | 18 → 1 | 143 → 97 |
+
+Tuesday's one is the request-flood alert above. Thursday's are the infected
+machine scanning the network, labelled normal in the dataset.
+
+**Per labelled flow**, normal flows wrongly flagged by any rule except the
+check-in rule: Friday 22 → 0, Wednesday 20 → 0, Monday 41 → 0, Tuesday 964
+→ 937 (all from that one request-flood alert). Detection of every attack
+type is identical to the flow, except one: a single UDP packet to port 123
+in Friday's port scan.
+
+**Per minute**, attack minutes caught by the rules are identical, except
+Friday's port scan: 13 of 26 minutes before, 12 now. The minute lost
+(15:12) is that same UDP packet: the scanner sent no connection requests
+in it. The old rules flagged it only because the scanner's count from two
+minutes earlier was still on the flow, which depended on when cleanup ran.
 
 ### 24 hours on a real laptop
 
@@ -365,7 +505,8 @@ python scripts/evaluate.py Wednesday-workingHours.pcap Wednesday-*.pcap_ISCX.csv
 The exclusions used above: on Wednesday `172.16.0.1 192.168.10.50`; on
 Friday the same pair plus each infected machine with its controller
 (`192.168.10.5`, `.8`, `.9`, `.14` and `.15` with `205.174.165.73`); Monday
-has no attacks, so it needs none. Only
+has no attacks, so it needs none. Tuesday and Thursday were scored with no
+exclusions (see their section for what that means on Thursday). Only
 normal labels are dropped; attacks between those hosts are still scored.
 Without `--exclude-pair` the script prints the strict figures.
 

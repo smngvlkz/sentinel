@@ -201,6 +201,7 @@ class TestNormalTraffic:
             "avg_packet_size": 60,
             "ack_ratio": 0.0,
             "unanswered_syn_ports": 1,
+            "unfinished_syns": 500,
             "packet_size": 64,
             "packet_has_ack": 0,
             "total_packets": 1500,
