@@ -68,7 +68,7 @@ def tables(t: FlowTracker) -> dict[str, int]:
 
 
 def flood(n: int, rate: float, config: dict) -> bool:
-    tracker = FlowTracker(limits=config["limits"])
+    tracker = FlowTracker(limits=config["limits"], handshake_seconds=config["syn_flood"]["handshake_seconds"])
     rules = RuleEngine(config)
     print(f"Flood: {n:,} connections from unique spoofed addresses at {rate:,.0f}/s of packet time")
     start_rss = rss_mb()
@@ -105,7 +105,7 @@ def flood(n: int, rate: float, config: dict) -> bool:
 
 def hidden_scan(flood_rate: float, scan_interval: float, config: dict) -> float | None:
     """Seconds until the scan is caught under the flood, or None if it never is."""
-    tracker = FlowTracker(limits=config["limits"])
+    tracker = FlowTracker(limits=config["limits"], handshake_seconds=config["syn_flood"]["handshake_seconds"])
     rules = RuleEngine(config)
     needed = int(config["port_scan"]["min_unique_ports"]) + 1
     next_scan, port, i, now = 0.0, 1, 0, 0.0

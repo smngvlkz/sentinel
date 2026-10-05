@@ -18,6 +18,12 @@ from .beacons import BeaconTracker
 from .connections import ConnectionTable, HostActivity, connection_features
 from .seen_twice import SeenTwiceTable
 
+# Connection requests followed per flow while their handshake completes.
+# Beyond this, new ones aren't followed until some finish or expire: a flood
+# still shows up a grace period later (more than min_unfinished of these
+# expire), and the flow table stays small.
+MAX_PENDING_SYNS = 32
+
 
 def _new_flow() -> dict:
     return {
@@ -36,13 +42,23 @@ def _new_flow() -> dict:
         "answered_ports": set(),
         "ack_count": 0,
         "flag_counts": defaultdict(int),
+        # Connection requests (by source port) not yet completed, oldest
+        # first, and how many were still unfinished after the grace period.
+        "pending_syns": {},
+        "unfinished_syns": 0,
     }
 
 
 class FlowTracker:
 
-    def __init__(self, flow_timeout: float = 30.0, limits: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        flow_timeout: float = 30.0,
+        limits: dict[str, int] | None = None,
+        handshake_seconds: float = DEFAULTS["syn_flood"]["handshake_seconds"],
+    ) -> None:
         limits = {**DEFAULTS["limits"], **(limits or {})}
+        self.handshake_seconds = handshake_seconds
         # A flood of one-packet flows can't push out flows seen twice (seen_twice.py).
         self.flows: SeenTwiceTable[tuple[str, str], dict] = SeenTwiceTable(
             limits["max_flows"], on_evict=lambda key, _: self._release(key[0])
@@ -64,6 +80,15 @@ class FlowTracker:
         now = float(packet["timestamp"])
 
         flow = self.flows.touch(key, _new_flow)
+        if flow["start_time"] and now - flow["last_seen"] > self.flow_timeout:
+            # Idle past the timeout, so this flow is over; cleanup just hasn't
+            # run yet (it checks once a minute). Start afresh, as if it had:
+            # otherwise the rates average in the quiet gap, and a flood that
+            # repeats every minute is only caught when cleanup happens to fall
+            # between two bursts.
+            self._release(key[0])
+            flow.clear()
+            flow.update(_new_flow())
         if flow["start_time"] == 0.0:
             flow["start_time"] = now
             src = packet["src_ip"]
@@ -79,6 +104,7 @@ class FlowTracker:
             flow["flag_counts"][flags] += 1
         if flags == "S":
             flow["syn_ports_seen"].add(packet["dst_port"])
+            self._syn_sent(flow, packet["src_port"], now)
         elif "S" in flags and "A" in flags:
             # A SYN-ACK answers the connection attempt in the reverse flow.
             # .get(), not [], so a stray SYN-ACK doesn't create a flow.
@@ -87,6 +113,11 @@ class FlowTracker:
                 asker["answered_ports"].add(packet["src_port"])
         if "A" in flags:
             flow["ack_count"] += 1
+            if "S" not in flags:
+                # The client's ACK completes its handshake (and every later
+                # packet carries one): that request wasn't a flood.
+                flow["pending_syns"].pop(packet["src_port"], None)
+        self._expire_syns(flow, now)
 
         duration = max(now - flow["start_time"], 0.001)
 
@@ -114,10 +145,32 @@ class FlowTracker:
             "src_connection_count": self.ip_connection_counts.get(packet["src_ip"], 0),
             "syn_count": flow["flag_counts"].get("S", 0),
             "syn_ratio": flow["flag_counts"].get("S", 0) / flow["packet_count"],
+            "unfinished_syns": flow["unfinished_syns"],
             **connection_features(conn, outbound, now),
             **self.hosts.features(conn, now),
             **self.beacons.features(conn, now),
         }
+
+    def _syn_sent(self, flow: dict, src_port: str, now: float) -> None:
+        pending = flow["pending_syns"]
+        if src_port in pending or len(pending) >= MAX_PENDING_SYNS:
+            return  # a retransmission of a request already waiting, or too many to follow
+        pending[src_port] = now
+
+    def _expire_syns(self, flow: dict, now: float) -> None:
+        """
+        Requests not completed within the grace period count as unfinished.
+        A browser opening a dozen connections at once completes them all
+        within a round trip; a flood never completes its requests (no answer,
+        or the sender resets instead of finishing the handshake).
+        """
+        pending = flow["pending_syns"]
+        while pending:
+            port, sent = next(iter(pending.items()))
+            if now - sent <= self.handshake_seconds:
+                break
+            del pending[port]
+            flow["unfinished_syns"] += 1
 
     @property
     def evicted(self) -> int:

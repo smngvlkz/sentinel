@@ -46,9 +46,10 @@ class TestFullPipeline:
         assert threats == []
 
     def test_syn_flood_detected(self, tracker, rules):
-        """Many rapid SYN packets should trigger SYN_FLOOD."""
+        """Rapid SYNs that never complete trigger SYN_FLOOD, once they've had a
+        second (handshake_seconds) to complete and haven't."""
         base_time = 1000.0
-        for i in range(100):
+        for i in range(200):
             pkt = {
                 "timestamp": str(base_time + i * 0.01),
                 "src_ip": "10.0.0.99",
@@ -119,9 +120,9 @@ class TestFullPipeline:
         assert "LARGE_PAYLOAD" in threats
 
     def test_high_frequency_detected(self, tracker, rules):
-        """Extremely rapid packets should trigger HIGH_FREQUENCY."""
+        """Extremely rapid packets kept up for over a second trigger HIGH_FREQUENCY."""
         base_time = 1000.0
-        for i in range(300):
+        for i in range(3000):
             pkt = {
                 "timestamp": str(base_time + i * 0.0005),
                 "src_ip": "10.0.0.77",

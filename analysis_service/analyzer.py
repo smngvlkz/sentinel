@@ -173,7 +173,7 @@ def main() -> None:
         else None
     )
 
-    tracker = FlowTracker(limits=config["limits"])
+    tracker = FlowTracker(limits=config["limits"], handshake_seconds=config["syn_flood"]["handshake_seconds"])
     detector = DetectionEngine()
     alerts = AlertManager()
     retention = config["retention"]

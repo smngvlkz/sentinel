@@ -6,6 +6,46 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Far fewer false connection-flood alerts. The rule fired when a browser
+  opened a dozen connections to a web server at once: it decided after 0.1
+  seconds, before the server's answers had come back. It now counts only
+  connection requests still unfinished after a second (`handshake_seconds`
+  under `[syn_flood]`), and needs at least 10 (`min_unfinished`). On the five
+  CIC-IDS2017 days, this removed every connection-flood false alarm caused by
+  browsers and lost no detections. A flood is now reported about a second
+  after it starts, and one that stops within a second isn't reported.
+- Floods that repeat after a pause were missed after the first few. The
+  rate rules average over a flow's life, and a flow idle past its 30-second
+  timeout was only cleared when the once-a-minute cleanup happened to run in
+  the gap. A flood repeating every minute (like `make demo`'s) was caught 2
+  to 4 times in 10 minutes. A flow idle past the timeout now starts afresh
+  on its next packet, so every one is caught.
+- Far fewer false traffic-burst alerts. Every one on the five CIC-IDS2017
+  days was a workstation and the office server exchanging a burst of
+  directory and DNS lookups: 120 to 220 packets in a tenth of a second. A
+  traffic burst now has to keep its rate up for a second (`min_seconds`
+  under `[high_frequency]`). The test and demo floods last three.
+- Together, on the default settings: no normal machine gets a false alarm
+  on Friday, Wednesday or Monday (6, 6 and 7 before), and one does on
+  Tuesday (5 before). Every attack minute caught before is still caught,
+  except one minute in which Friday's scanner sent a single UDP packet and
+  no connection requests.
+
+### Known limitations
+
+- The fix **failed** the validation target set before testing it on
+  CIC-IDS2017's Tuesday and Thursday: at most one high-severity false alarm
+  per normal machine. On Thursday, the infected machine's scan of the
+  network is labelled normal in the dataset, so its alerts count as false
+  alarms on 10 machines. Details in [docs/evaluation.md](docs/evaluation.md).
+- The repeated-flood and traffic-burst fixes are not validated. Both were
+  designed after Tuesday and Thursday had been run, and the traffic-burst
+  rule's one-second threshold was chosen after looking at all five days'
+  alerts, Tuesday and Thursday included. CIC-IDS2017 has no untouched days
+  left; validating them needs fresh data.
+
 ## [0.6.1] - 2026-10-04
 
 ### Fixed
