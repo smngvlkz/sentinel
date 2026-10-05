@@ -21,7 +21,7 @@ function onKey(e: KeyboardEvent, i: number) {
         <SectionHeading
           eyebrow="Real numbers, real traffic"
           :title="'Tested on public data.\nMisses included.'"
-          :lead="`Three full days of ${dataset.name} replayed through the real detection pipeline. Each labelled flow counts as caught only if SentinelAI alerted on that connection while it was happening.`"
+          :lead="`Five full days of ${dataset.name} replayed through the real detection pipeline. Each labelled flow counts as caught only if SentinelAI alerted on that connection while it was happening.`"
         />
 
         <div class="lift mt-12 flex rounded-lg border border-line bg-bg p-0.5 text-body sm:inline-flex" role="tablist" aria-label="Test day">
@@ -32,14 +32,18 @@ function onKey(e: KeyboardEvent, i: number) {
             ref="tabs"
             type="button"
             role="tab"
-            class="flex-1 rounded-md px-4 py-1.5 font-medium transition"
+            class="flex-1 rounded-md px-2 py-1.5 font-medium transition sm:px-4"
             :class="active === d.id ? 'bg-bg-3 text-fg' : 'text-fg-3 hover:text-fg'"
             :aria-selected="active === d.id"
             :aria-controls="`panel-${d.id}`"
             :tabindex="active === d.id ? 0 : -1"
             @click="active = d.id"
             @keydown="onKey($event, i)"
-          >{{ d.name }}</button>
+          >
+            <!-- Five days don't fit a phone's width by name; "Wed" does. -->
+            <span class="sm:hidden" aria-hidden="true">{{ d.name.slice(0, 3) }}</span>
+            <span class="max-sm:sr-only">{{ d.name }}</span>
+          </button>
         </div>
 
         <article

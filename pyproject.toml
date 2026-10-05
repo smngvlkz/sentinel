@@ -1,6 +1,6 @@
 [project]
 name = "sentinel"
-version = "0.6.1"
+version = "0.6.2"
 description = "Real-time network intrusion detection with rule-based and ML anomaly detection"
 readme = "README.md"
 license = "MIT"
