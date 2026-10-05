@@ -246,8 +246,8 @@ export const limits: Limit[] = [
     body: "Packet capture runs in Python. Its speed on a Raspberry Pi hasn't been measured yet, and on a saturated link it may miss packets.",
   },
   {
-    title: "It misses slow attacks, password guessing and anything inside the payload",
-    body: "Slowloris sends almost no traffic, by design, and was missed completely. Password guessing over FTP and SSH looks like ordinary logins. Heartbleed and web attacks such as SQL injection live inside the traffic's contents, which SentinelAI doesn't read. All were 0% in testing.",
+    title: "It misses slow attacks, very short floods, password guessing and anything inside the payload",
+    body: "Slowloris sends almost no traffic, by design, and was missed completely. Password guessing over FTP and SSH looks like ordinary logins. Heartbleed and web attacks such as SQL injection live inside the traffic's contents, which SentinelAI doesn't read. All were 0% in testing. And a flood that stops within a second isn't reported, so that normal bursts of connections don't raise alarms.",
   },
   {
     title: "It detects, it doesn't block",
