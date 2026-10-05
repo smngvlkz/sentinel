@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.6.1",
+  version: "0.6.2",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -52,14 +52,14 @@ export const days: Day[] = [
     tag: "Thresholds tuned on this day",
     summary: "A port scan, an HTTP flood and a botnet, in 9.9 million packets.",
     rows: [
-      { attack: "Port scan", flows: "158,924", caught: "99.7%", minutes: "13 of 26" },
+      { attack: "Port scan", flows: "158,924", caught: "99.7%", minutes: "12 of 26" },
       { attack: "DDoS (HTTP flood)", flows: "128,027", caught: "99.9%", minutes: "21 of 21" },
       { attack: "Botnet (Ares)", flows: "1,966", caught: "23.9%", minutes: "387 of 592" },
     ],
     normal: [
-      { label: "Normal flows wrongly flagged, check-in rule aside", value: "22 of 380,557" },
+      { label: "Normal flows wrongly flagged, check-in rule aside", value: "0 of 380,557" },
       { label: "Flagged by the check-in rule (one polling server)", value: "1,441" },
-      { label: "Normal machines with a false alarm that day", value: "5 of 7" },
+      { label: "Normal machines with a false alarm that day", value: "1 of 7" },
     ],
   },
   {
@@ -75,9 +75,9 @@ export const days: Day[] = [
       { attack: "Heartbleed", flows: "11", caught: "0%", minutes: "0 of 21", missed: true },
     ],
     normal: [
-      { label: "Normal flows wrongly flagged, check-in rule aside", value: "20 of 432,832" },
+      { label: "Normal flows wrongly flagged, check-in rule aside", value: "0 of 432,832" },
       { label: "Flagged by the check-in rule (one polling server)", value: "1,486" },
-      { label: "Normal machines with a false alarm that day", value: "7 of 12" },
+      { label: "Normal machines with a false alarm that day", value: "0 of 11" },
     ],
   },
   {
@@ -87,20 +87,56 @@ export const days: Day[] = [
     summary: "Ordinary office traffic with no attacks, in 11.6 million packets.",
     rows: [],
     normal: [
-      { label: "Normal flows wrongly flagged, check-in rule aside", value: "41 of 529,442" },
+      { label: "Normal flows wrongly flagged, check-in rule aside", value: "0 of 529,442" },
       { label: "Flagged by the check-in rule (two workstations and one polling server)", value: "7,877" },
-      { label: "Normal machines with a false alarm that day", value: "9 of 13" },
+      { label: "Normal machines with a false alarm that day", value: "3 of 13" },
+    ],
+  },
+  {
+    id: "tuesday",
+    name: "Tuesday",
+    tag: "Held out, then used once to test a fix",
+    summary: "FTP and SSH password guessing, in 11.5 million packets. No version of SentinelAI has caught these: they aren't floods or scans, which is what its rules look for. Shown so you can see its limits.",
+    rows: [
+      { attack: "FTP password guessing", flows: "7,938", caught: "0%", minutes: "0 of 64", missed: true },
+      { attack: "SSH password guessing", flows: "5,897", caught: "0%", minutes: "0 of 63", missed: true },
+    ],
+    normal: [
+      { label: "Normal flows wrongly flagged, check-in rule aside (one alert)", value: "937 of 431,737" },
+      { label: "Flagged by the check-in rule (one polling server)", value: "1,650" },
+      { label: "Normal machines with a false alarm that day", value: "2 of 12" },
+    ],
+  },
+  {
+    id: "thursday",
+    name: "Thursday",
+    tag: "Held out, then used once to test a fix",
+    summary: "Web attacks and an infiltration, in 9.2 million packets. No version of SentinelAI has caught the web attacks: each is an ordinary-looking web request, and what makes it an attack (the passwords tried, the code slipped in) is inside the request, which it doesn't read. The infiltration shows up only through the infected machine scanning the network (below). Shown so you can see its limits.",
+    rows: [
+      { attack: "Web login brute force", flows: "1,507", caught: "0%", minutes: "0 of 44", missed: true },
+      { attack: "Cross-site scripting", flows: "652", caught: "0%", minutes: "0 of 21", missed: true },
+      { attack: "SQL injection", flows: "21", caught: "0%", minutes: "0 of 3", missed: true },
+      { attack: "Infiltration (as labelled)", flows: "36", caught: "0%", minutes: "0 of 53", missed: true },
+    ],
+    normal: [
+      { label: "Normal flows wrongly flagged, check-in rule aside (mostly the infected machine's scan)", value: "66,854 of 456,163" },
+      { label: "Flagged by the check-in rule (one polling server)", value: "1,644" },
+      { label: "Normal machines with a false alarm that day (every one scanned by the infected machine)", value: "10 of 11" },
+      { label: "…counting that documented scan as an attack (decided after seeing this result)", value: "1 of 11" },
     ],
   },
 ];
 
 export const resultsCaption =
-  "CIC-IDS2017, Canadian Institute for Cybersecurity. Friday's thresholds were partly tuned on the same day. Wednesday and Monday were held out: every threshold was frozen before they were replayed.";
+  "CIC-IDS2017, Canadian Institute for Cybersecurity. Friday's thresholds were partly tuned on the same day. Wednesday and Monday were held out: every threshold was frozen before they were replayed. Tuesday and Thursday were kept untouched to test the 0.6.2 connection-flood fix, which failed its target there (details in the evaluation). All five days are shown with 0.6.2's rules.";
 
 export const resultNotes: string[] = [
   "Botnet flow recall looks low because every check-in before the first alert counts as missed. All five infected machines were flagged, each about 45 minutes after it started.",
   "The check-in rule is noisy. It flagged a server that polls an internet service all day on every day tested, and on Monday also two workstations that kept reconnecting to dozens of web services for hours. Timing alone can't tell that apart from malware, and the rule hasn't been tuned to hide it. On a real laptop over 24 hours it flagged a code editor and the Claude apps 50 times, so it's off by default. These results were measured with it on.",
   "An earlier version of these results had a scoring bug, found by the held-out Wednesday test. The numbers here are the corrected ones.",
+  "Thursday's infiltration scores 0% because the dataset labels only 36 of its flows as attacks. SentinelAI did flag it: the infected machine scanning the whole network raised port-scan and connection-flood alerts on every machine it scanned. Those count as false alarms above, because the dataset labels the scan as normal.",
+  "Tuesday's password guessing and Thursday's web attacks aren't caught by any rule: repeated logins look like normal connections, and web attacks live in page contents, which SentinelAI doesn't read.",
+  "In 0.6.2, browsers opening many connections at once and quick bursts of lookups to an office server stopped raising false alarms, and floods that repeat after a pause stopped being missed. Every number on these tabs is measured with those rules. Normal machines are counted on each day leaving out every machine involved in a labelled attack.",
 ];
 
 export type FeatureIcon = "radar" | "message" | "tag" | "check" | "shuffle" | "gauge" | "lock" | "play";
@@ -210,8 +246,8 @@ export const limits: Limit[] = [
     body: "Packet capture runs in Python. Its speed on a Raspberry Pi hasn't been measured yet, and on a saturated link it may miss packets.",
   },
   {
-    title: "It misses slow attacks and anything inside the payload",
-    body: "Slowloris sends almost no traffic, by design, and was missed completely. Heartbleed lives inside encrypted traffic, which SentinelAI doesn't read. Both were 0% in testing.",
+    title: "It misses slow attacks, password guessing and anything inside the payload",
+    body: "Slowloris sends almost no traffic, by design, and was missed completely. Password guessing over FTP and SSH looks like ordinary logins. Heartbleed and web attacks such as SQL injection live inside the traffic's contents, which SentinelAI doesn't read. All were 0% in testing.",
   },
   {
     title: "It detects, it doesn't block",

@@ -330,6 +330,17 @@ rule off), old rules against 0.6.2's:
 Tuesday's one is the request-flood alert above. Thursday's are the infected
 machine scanning the network, labelled normal in the dataset.
 
+**On the website, with the check-in rule on** (the basis of its published
+figures): normal machines with a false alarm are 1 of 7 on Friday (the
+polling server), 0 of 11 on Wednesday, 3 of 13 on Monday (the three the
+check-in rule flags), 2 of 12 on Tuesday and 10 of 11 on Thursday. Every one of Thursday's ten was
+scanned by the infected machine; counting that documented scan as an attack,
+a reading made after seeing the result, leaves 1 of 11 (the polling server). The old
+rules give 5 of 7 and 9 of 13 counted the same way, matching the published
+figures. "Normal machines" leaves out every machine involved in a labelled
+attack that day; on Wednesday that now includes the Heartbleed target,
+`192.168.10.51`, which the earlier figure (7 of 12) counted as normal.
+
 **Per labelled flow**, normal flows wrongly flagged by any rule except the
 check-in rule: Friday 22 → 0, Wednesday 20 → 0, Monday 41 → 0, Tuesday 964
 → 937 (all from that one request-flood alert). Detection of every attack
