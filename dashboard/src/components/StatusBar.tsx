@@ -108,13 +108,13 @@ export default function StatusBar({ health, stats, hours, now, onReview, childre
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-line bg-bg p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-      <div className="min-w-0">
+      <div className="min-w-0 max-w-full">
         <div className="flex flex-wrap items-center gap-2.5">
           {pill}
           <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         </div>
-        <p className="mt-1.5 text-fg-2">{detail}</p>
-        {context && <p className="mt-0.5 text-[13px] text-fg-3">{context}</p>}
+        <p className="mt-1.5 min-w-0 break-words [overflow-wrap:anywhere] text-fg-2">{detail}</p>
+        {context && <p className="mt-0.5 break-words [overflow-wrap:anywhere] text-[13px] text-fg-3">{context}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {action}

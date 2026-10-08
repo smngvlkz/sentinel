@@ -165,7 +165,7 @@ export function Address({
 
   if (!label) {
     return (
-      <span className="font-mono text-[13px] whitespace-nowrap">
+      <span className="font-mono text-[13px] break-all sm:whitespace-nowrap">
         {ip}
         {portSuffix}
       </span>
@@ -174,10 +174,10 @@ export function Address({
 
   if (layout === "banner") {
     return (
-      <span className="whitespace-nowrap">
+      <span className="inline-block max-w-full align-baseline break-words [overflow-wrap:anywhere] sm:whitespace-nowrap">
         <span className="font-medium">{label}</span>
         <span className="text-fg-3"> · </span>
-        <span className="font-mono text-xs text-fg-3">{ip}</span>
+        <span className="font-mono text-xs break-all text-fg-3 [overflow-wrap:anywhere] sm:break-normal">{ip}</span>
       </span>
     );
   }
