@@ -27,6 +27,8 @@ import redis
 from dotenv import load_dotenv
 
 from common.migrations import migrate
+# Severity per threat type (unknown types count as low), shared with notifications.
+from common.threats import SEVERITIES, SEVERITY
 
 from . import auth
 
@@ -44,21 +46,6 @@ CAPTURE_STATS_KEY = "sentinel:capture:stats"
 # Traffic older than this means capture has stopped or the network is silent.
 CAPTURE_LIVE_SECONDS = 15
 
-# How urgent each threat type is. Unknown types count as low.
-# Keep in sync with dashboard/src/lib/threats.ts.
-SEVERITY: dict[str, str] = {
-    "SYN_FLOOD": "high",
-    "PORT_SCAN": "medium",
-    "HIGH_FREQUENCY": "medium",
-    "ANOMALY": "medium",
-    "LARGE_PAYLOAD": "low",
-    "REQUEST_FLOOD": "high",
-    "DISTRIBUTED_FLOOD": "high",
-    "NETWORK_SWEEP": "medium",
-    "BEACONING": "medium",
-    "RESOURCE_PRESSURE": "high",
-}
-SEVERITIES = ("high", "medium", "low")
 Severity = Literal["high", "medium", "low"]
 ReviewStatus = Literal["all", "unreviewed", "reviewed"]
 
