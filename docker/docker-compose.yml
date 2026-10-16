@@ -1,6 +1,6 @@
 # Every port is bound to 127.0.0.1, so only this machine can reach them,
-# except the dashboard's when DASHBOARD_BIND says otherwise (README "Opening
-# the dashboard from other devices"). The API won't start that way until a
+# except the dashboard's and ntfy's when DASHBOARD_BIND says otherwise (README
+# "Opening the dashboard from other devices"). The API won't start that way until a
 # password is set. The API's own port always stays on this machine: the
 # dashboard reaches it inside Docker.
 
@@ -94,6 +94,59 @@ services:
       - dashboard-api
     restart: unless-stopped
 
+  # Sends alerts to your phone, email or chat (config/notifications.toml).
+  # Sends nothing until notifications are turned on there.
+  notifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.notifier
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *db-env
+      REDIS_HOST: redis
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+    volumes:
+      - ../config:/app/config:ro
+    restart: unless-stopped
+
+  # Your own ntfy server, for phone notifications that stay on this machine.
+  # Started when COMPOSE_PROFILES=ntfy is in .env (make notify-setup adds it).
+  # Its port is open to the same devices as the dashboard (DASHBOARD_BIND),
+  # because your phone has to reach it, so it's locked down: everything is
+  # refused except reading your topic (NTFY_TOPIC, a random name) and the
+  # notifier posting to it with its token (NTFY_TOKEN). For iPhones, ntfy.sh
+  # only relays a "new message" wake-up; the alert text is fetched from here.
+  ntfy:
+    profiles: ["ntfy"]
+    image: binwiederhier/ntfy:v2.31.0
+    command: serve
+    environment:
+      # The address your phone uses for this server, e.g. http://100.101.102.103:8090.
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://localhost:8090}
+      NTFY_UPSTREAM_BASE_URL: https://ntfy.sh
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_CACHE_DURATION: 24h
+      NTFY_WEB_ROOT: disable
+      NTFY_AUTH_FILE: /var/cache/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      # The notifier's account. The hash is of a random password that was
+      # thrown away: nobody can log in as it, the notifier uses NTFY_TOKEN.
+      NTFY_AUTH_USERS: "sentinel-notifier:$$2a$$10$$9U2rfv1UdLdfg9SwMoUkd.O6Ha5z6cG6fZZdXPbPgdl0DOebfIpQq:user"
+      NTFY_AUTH_TOKENS: "sentinel-notifier:${NTFY_TOKEN:-}:SentinelAI notifier"
+      NTFY_AUTH_ACCESS: "*:${NTFY_TOPIC:-}:read-only,sentinel-notifier:${NTFY_TOPIC:-}:write-only"
+    ports:
+      - "${DASHBOARD_BIND:-127.0.0.1}:${NTFY_PORT:-8090}:80"
+    volumes:
+      - ntfy_cache:/var/cache/ntfy
+    restart: unless-stopped
+
   # Fake attack traffic for trying SentinelAI without packet capture.
   # Started only by `make demo` (docker compose --profile demo up).
   simulator:
@@ -112,3 +165,4 @@ services:
 volumes:
   redis_data:
   postgres_data:
+  ntfy_cache:

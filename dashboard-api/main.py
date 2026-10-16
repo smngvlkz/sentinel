@@ -27,6 +27,8 @@ import redis
 from dotenv import load_dotenv
 
 from common.migrations import migrate
+# Severity per threat type (unknown types count as low), shared with notifications.
+from common.threats import SEVERITIES, SEVERITY
 
 from . import auth
 
@@ -43,22 +45,10 @@ CONSUMER_GROUP = "analyzers"
 CAPTURE_STATS_KEY = "sentinel:capture:stats"
 # Traffic older than this means capture has stopped or the network is silent.
 CAPTURE_LIVE_SECONDS = 15
+# The notifier reports every couple of seconds; older than this, it's stopped.
+NOTIFIER_HEARTBEAT_KEY = "sentinel:notifier:heartbeat"
+NOTIFIER_LIVE_SECONDS = 30
 
-# How urgent each threat type is. Unknown types count as low.
-# Keep in sync with dashboard/src/lib/threats.ts.
-SEVERITY: dict[str, str] = {
-    "SYN_FLOOD": "high",
-    "PORT_SCAN": "medium",
-    "HIGH_FREQUENCY": "medium",
-    "ANOMALY": "medium",
-    "LARGE_PAYLOAD": "low",
-    "REQUEST_FLOOD": "high",
-    "DISTRIBUTED_FLOOD": "high",
-    "NETWORK_SWEEP": "medium",
-    "BEACONING": "medium",
-    "RESOURCE_PRESSURE": "high",
-}
-SEVERITIES = ("high", "medium", "low")
 Severity = Literal["high", "medium", "low"]
 ReviewStatus = Literal["all", "unreviewed", "reviewed"]
 
@@ -613,6 +603,95 @@ def alert_summary(hours: int = Query(24, ge=1, le=168)) -> dict[str, Any]:
             )
             rows = cur.fetchall()
     return {"summary": rows}
+
+
+# After /alerts/summary, so "summary" is never read as an alert id.
+@app.get("/alerts/{alert_id}")
+def get_alert(alert_id: int) -> dict[str, Any]:
+    """One alert, for links from notifications (/?alert=<id>)."""
+    sev_expr, sev_params = severity_sql()
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"{alert_select(sev_expr)} WHERE alerts.id = %s", sev_params + [alert_id])
+            row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "That alert is gone: alerts are deleted after the retention period.")
+    return row
+
+
+def _notifier_state(r: redis.Redis) -> dict[str, Any] | None:
+    """The notifier's last report, if it's recent enough that the notifier is running."""
+    try:
+        beat = r.get(NOTIFIER_HEARTBEAT_KEY)
+    except redis.exceptions.RedisError:
+        return None
+    if not beat:
+        return None
+    state = json.loads(beat)
+    return state if time.time() - float(state.get("at", 0)) < NOTIFIER_LIVE_SECONDS else None
+
+
+@app.get("/notifications")
+def notifications_status() -> dict[str, Any]:
+    """Whether notifications are on, where they go, what was last sent, and the latest test."""
+    state = _notifier_state(get_redis())
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """SELECT channel, kind, sent_at, message->>'title' AS title FROM notifications
+                   WHERE status = 'sent' AND kind <> 'test' ORDER BY sent_at DESC LIMIT 1"""
+            )
+            last_sent = cur.fetchone()
+            cur.execute(
+                """SELECT COUNT(DISTINCT message_id) AS n FROM notifications
+                   WHERE status = 'sent' AND kind <> 'test' AND sent_at > NOW() - interval '24 hours'"""
+            )
+            sent_24h = cur.fetchone()["n"]
+            # The newest message that hasn't got through, in the last day.
+            cur.execute(
+                """SELECT channel, status, attempts, last_error, created_at, next_attempt_at FROM notifications
+                   WHERE status <> 'sent' AND last_error IS NOT NULL AND created_at > NOW() - interval '24 hours'
+                   ORDER BY id DESC LIMIT 1"""
+            )
+            problem = cur.fetchone()
+            cur.execute("SELECT requested_at, handled_at FROM notification_tests ORDER BY id DESC LIMIT 1")
+            test = cur.fetchone()
+            if test is not None:
+                cur.execute(
+                    """SELECT channel, status, attempts, last_error FROM notifications
+                       WHERE kind = 'test' AND created_at >= %s::timestamptz - interval '5 seconds'
+                       ORDER BY channel""",
+                    [test["requested_at"]],
+                )
+                test["results"] = cur.fetchall()
+    return {
+        "running": state is not None,
+        "enabled": bool(state and state.get("enabled")),
+        "error": state.get("error") if state else None,
+        "channels": state.get("channels", []) if state else [],
+        "min_severity": state.get("min_severity") if state else None,
+        "quiet_now": bool(state and state.get("quiet_now")),
+        "last_sent": last_sent,
+        "sent_24h": sent_24h,
+        "problem": problem,
+        "last_test": test,
+    }
+
+
+@app.post("/notifications/test", dependencies=[Depends(require_trusted_request)])
+def send_test_notification() -> dict[str, Any]:
+    """Ask the notifier to send a test to every channel that's turned on."""
+    state = _notifier_state(get_redis())
+    if state is None:
+        raise HTTPException(409, "The notifier isn't running. Start it with make up.")
+    if state.get("error"):
+        raise HTTPException(409, f"notifications.toml needs fixing first: {state['error']}")
+    if not state.get("channels"):
+        raise HTTPException(409, "No channel is turned on yet. Set one up in config/notifications.toml.")
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO notification_tests DEFAULT VALUES RETURNING requested_at")
+        requested_at = cur.fetchone()[0]
+    return {"requested_at": requested_at.isoformat()}
 
 
 @app.get("/top-ips")

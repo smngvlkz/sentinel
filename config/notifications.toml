@@ -1,0 +1,74 @@
+# Notifications: where SentinelAI sends alerts as they happen.
+#
+# Nothing is sent until `enabled = true` here and at least one channel below
+# is turned on. Secrets (the SMTP password, the webhook URL, the ntfy topic)
+# go in .env, not here. Changes to this file apply within a few seconds;
+# after changing .env, run `make up`. Then `make notify-test` checks every
+# channel.
+#
+# Privacy: a notification carries the alert's IP addresses, and device names
+# and hostnames unless `ips_only` is on. Self-hosted ntfy (the default)
+# keeps that on your machine. Email, Discord, Slack and Telegram send it to
+# their servers.
+
+[notifications]
+enabled = false
+# The least urgent alert that's sent: "high", "medium" or "low".
+min_severity = "high"
+# Where the dashboard is, as your phone reaches it, e.g.
+# "http://100.101.102.103:3001" over Tailscale. Each notification links to
+# its alert there. Leave empty to send no links.
+dashboard_url = ""
+# true: addresses only, no device names or learned hostnames.
+ips_only = false
+# At most this many notifications in any hour. Alerts past the limit wait
+# and go out together in one summary when there's room again.
+max_per_hour = 10
+# An attack that goes on keeps raising alerts, about one a minute. After a
+# notification, the same alert again (same kind, same devices) isn't sent
+# for this many minutes; the dashboard still lists every one. 0 sends every
+# repeat.
+repeat_minutes = 60
+# For quiet hours and the times shown in notifications. A name from the time
+# zone database, e.g. "Africa/Johannesburg", "Europe/London",
+# "America/New_York".
+timezone = "UTC"
+
+[quiet_hours]
+enabled = false
+# 24-hour clock, in the timezone above. May cross midnight.
+start = "22:00"
+end = "07:00"
+# true: high-severity alerts are sent during quiet hours anyway. Everything
+# else waits for one summary when quiet hours end.
+let_high_through = true
+
+[ntfy]
+enabled = false
+# The ntfy server. "http://ntfy" is the one `make up` starts when
+# COMPOSE_PROFILES=ntfy is in .env (see README "Notifications").
+# "https://ntfy.sh" is the public server: no setup, but alert text passes
+# through it.
+server = "http://ntfy"
+# The topic name is in .env as NTFY_TOPIC (anyone who knows it, and can
+# reach the server, can read your alerts), and the token the notifier posts
+# with as NTFY_TOKEN. make notify-setup creates both.
+
+[email]
+enabled = false
+host = ""
+# 587 with starttls = true for most providers; 465 means TLS from the start.
+port = 587
+starttls = true
+username = ""
+# The password is in .env as SMTP_PASSWORD.
+from = ""
+to = ""
+
+[webhook]
+enabled = false
+# How to shape the message: "discord", "slack", "telegram" or "json" (a
+# plain JSON object, for anything else). The URL is in .env as WEBHOOK_URL.
+format = "json"
+# Telegram only: the chat to send to.
+telegram_chat_id = ""

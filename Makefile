@@ -9,7 +9,8 @@ EXPOSED := $(filter-out 127.0.0.1 localhost ::1,$(strip $(DASHBOARD_BIND)))
 
 .DEFAULT_GOAL := help
 .PHONY: help demo demo-stop up down password restart logs status build capture setup setup-env setup-python \
-        train-collect train-model test evaluate stress lint dashboard-dev install-launchd clean
+        train-collect train-model test evaluate stress lint dashboard-dev install-launchd clean \
+        notify-setup notify-test
 
 help: ## Show this help
 	@echo "SentinelAI"
@@ -55,7 +56,7 @@ capture: ## Capture live packets from CAPTURE_INTERFACE (asks for sudo)
 	sudo $(PY) capture_service/capture.py
 
 down: ## Stop all services
-	$(COMPOSE) --profile demo down
+	$(COMPOSE) --profile demo --profile ntfy down
 
 # A one-off container, so it works while the API is refusing to start for want
 # of a password; the restart then lets the API start without waiting.
@@ -67,13 +68,36 @@ restart: ## Restart the analyzer (after editing config or training a model)
 	$(COMPOSE) restart analyzer
 
 status: ## Show which services are running
-	$(COMPOSE) --profile demo ps
+	$(COMPOSE) --profile demo --profile ntfy ps
 
 logs: ## Follow logs from all services
-	$(COMPOSE) --profile demo logs -f
+	$(COMPOSE) --profile demo --profile ntfy logs -f
 
 build: ## Rebuild all images
-	$(COMPOSE) --profile demo build
+	$(COMPOSE) --profile demo --profile ntfy build
+
+# ── Notifications ───────────────────────────────────────────────────────
+
+# Adds what self-hosted ntfy needs to .env, once: a random topic name (anyone
+# who can reach the server and knows it can read your alerts), the token the
+# notifier posts with, and the profile that starts the server.
+notify-setup: .env ## Set up phone notifications with your own ntfy server
+	@# A last line without a line break would have the next setting glued onto it.
+	@[ -z "$$(tail -c 1 .env)" ] || echo >> .env
+	@grep -q '^NTFY_TOPIC=.' .env || echo "NTFY_TOPIC=sentinel-$$(python3 -c 'import secrets; print(secrets.token_hex(8))')" >> .env
+	@grep -q '^NTFY_TOKEN=.' .env || echo "NTFY_TOKEN=tk_$$(python3 -c 'import secrets, string; a = string.ascii_lowercase + string.digits; print("".join(secrets.choice(a) for _ in range(29)))')" >> .env
+	@grep -q '^COMPOSE_PROFILES=' .env || echo "COMPOSE_PROFILES=ntfy" >> .env
+	@grep -q '^NTFY_BASE_URL=' .env || echo "NTFY_BASE_URL=" >> .env
+	@echo "Added NTFY_TOPIC, NTFY_TOKEN and COMPOSE_PROFILES=ntfy to .env (if they weren't there)."
+	@echo "Next (README \"Notifications\" has the details):"
+	@echo "  1. In .env, set NTFY_BASE_URL to this machine's address as your phone reaches it,"
+	@echo "     port $(or $(NTFY_PORT),8090), e.g. http://100.101.102.103:$(or $(NTFY_PORT),8090), and DASHBOARD_BIND=0.0.0.0."
+	@echo "  2. In config/notifications.toml, set enabled = true under [notifications] and [ntfy]."
+	@echo "  3. Run make up, then subscribe in the ntfy app: server NTFY_BASE_URL, topic $$(grep '^NTFY_TOPIC=' .env | cut -d= -f2)"
+	@echo "  4. Run make notify-test."
+
+notify-test: ## Send a test notification to every channel that's turned on
+	$(COMPOSE) exec notifier python -m notifier.send_test
 
 # ── Anomaly model ───────────────────────────────────────────────────────
 
@@ -110,4 +134,4 @@ install-launchd: ## macOS: run capture at boot as a LaunchDaemon (asks for sudo)
 	@echo "Capture now starts at boot. Logs: logs/capture.log"
 
 clean: ## Stop everything and delete all stored alerts and images
-	$(COMPOSE) --profile demo down -v --rmi local
+	$(COMPOSE) --profile demo --profile ntfy down -v --rmi local

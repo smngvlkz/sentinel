@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AccountControls from "@/components/AccountControls";
 import AlertDrawer from "@/components/AlertDrawer";
 import AlertTable, { type SeverityFilter, type StatusFilter } from "@/components/AlertTable";
 import GettingStarted from "@/components/GettingStarted";
 import LoginScreen from "@/components/LoginScreen";
 import Logo from "@/components/Logo";
+import NotificationsControl from "@/components/NotificationsControl";
 import ServiceStatus from "@/components/ServiceStatus";
 import StatsStrip from "@/components/StatsStrip";
 import StatusBar from "@/components/StatusBar";
@@ -15,6 +16,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import TopSources from "@/components/TopSources";
 import { Cmd } from "@/components/ui";
 import {
+  fetchAlert,
   fetchAlerts,
   fetchAlertSummary,
   fetchAuthStatus,
@@ -75,6 +77,13 @@ export default function Dashboard() {
     checkAuth();
   }, [checkAuth]);
 
+  // The first check fails if the API was down when the page loaded (restarting,
+  // say). Try again once it answers, or the account buttons never appear and a
+  // notification's link never opens its alert.
+  useEffect(() => {
+    if (health && !auth) checkAuth();
+  }, [health, auth, checkAuth]);
+
   const refresh = useCallback(async () => {
     try {
       setHealth(await fetchHealth());
@@ -120,7 +129,23 @@ export default function Dashboard() {
     return () => clearInterval(tick);
   }, []);
 
-  const closeDrawer = useCallback(() => setSelected(null), []);
+  // A notification links to /?alert=<id>: open that alert once data can load
+  // (after logging in, if a password is set). Once only, so closing it stays closed.
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (!auth || locked || linkHandled.current) return;
+    linkHandled.current = true;
+    const id = Number(new URLSearchParams(window.location.search).get("alert"));
+    if (!Number.isInteger(id) || id <= 0) return;
+    fetchAlert(id).then(setSelected, (e) => setLinkError(e instanceof Error ? e.message : "Couldn't open that alert."));
+  }, [auth, locked]);
+
+  const closeDrawer = useCallback(() => {
+    setSelected(null);
+    // Drop ?alert= so reloading the page doesn't open it again.
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const setTableFilter = (severity: SeverityFilter, status: StatusFilter) => {
     setTableSeverity(severity);
@@ -207,6 +232,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-5">
             {loaded && <ServiceStatus health={health} />}
+            {health && <NotificationsControl />}
             {auth && <AccountControls auth={auth} onChange={checkAuth} />}
             <ThemeToggle />
           </div>
@@ -220,6 +246,12 @@ export default function Dashboard() {
           </StatusBar>
         ) : (
           <div className="rounded-xl border border-line bg-bg p-5 text-fg-3 shadow-sm">Checking your network…</div>
+        )}
+
+        {linkError && (
+          <p role="alert" className="rounded-xl border border-medium-line bg-medium-soft px-5 py-3 text-medium">
+            Couldn&apos;t open the alert from that link. {linkError}
+          </p>
         )}
 
         {idleMinutes !== null && idleMinutes >= 1 && (

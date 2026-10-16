@@ -6,6 +6,44 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Notifications: SentinelAI can now tell your phone, your email or a chat
+  (Discord, Slack, Telegram, or any webhook) when it raises an alert. Off
+  until you turn it on in the new `config/notifications.toml`; see the
+  README's Notifications section.
+  - High-severity alerts by default. Each says what happened and between
+    which devices, by the names you've given them, and links to the alert in
+    the dashboard.
+  - An attack that goes on is notified once, then again after an hour if
+    it's still happening (`repeat_minutes`), not once a minute.
+  - At most 10 an hour (`max_per_hour`); the rest go out together in one
+    summary. Optional quiet hours, which let high-severity alerts through
+    unless you say otherwise.
+  - A send that fails is retried five times over about 1 hour 40 minutes,
+    then logged as failed. Notifications run as their own service (`notifier`), so a
+    slow or broken channel never holds up detection.
+  - Your own ntfy server, for phone notifications that stay on your machine:
+    `make notify-setup`, then subscribe in the ntfy app. It only lets your
+    phone read your topic and the notifier post to it.
+  - **Notifications** in the dashboard's header shows whether they're on,
+    what was last sent and anything failing, with a **Send test
+    notification** button. `make notify-test` does the same from the
+    terminal.
+- Opening `/?alert=<id>` in the dashboard opens that alert, which is where
+  notifications link to.
+
+### Fixed
+
+- The dashboard's account buttons didn't appear if the API was still
+  starting when the page loaded, until the page was reloaded.
+- On phones, every page of the dashboard, the login screen included, opened
+  wider than the screen, so it had to be swiped sideways to centre. It now
+  fits exactly from 360 pixels wide up.
+- Addresses no longer break in the middle on phones (`203.0.11` / `3.66`). A
+  full IPv6 address wraps after a colon, and a long device name in the alert
+  list ends in "…" instead of running past the edge of the card.
+
 ## [0.6.2] - 2026-10-05
 
 ### Fixed

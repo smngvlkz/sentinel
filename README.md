@@ -95,6 +95,8 @@ Run `make` on its own to print this list.
 | `make capture` | Capture live packets from `CAPTURE_INTERFACE` (asks for sudo) |
 | `make down` | Stop all services |
 | `make restart` | Restart the analyzer, after editing `config/detection.toml` or training a model |
+| `make notify-setup` | Set up phone notifications with your own ntfy server (see [Notifications](#notifications)) |
+| `make notify-test` | Send a test notification to every channel that's turned on |
 | `make status` | Show which services are running |
 | `make logs` | Follow logs from all services |
 | `make build` | Rebuild all images |
@@ -122,6 +124,8 @@ Detection engine ── rules + optional Isolation Forest model
        │
 Alert manager ── de-duplicates repeats, stores to PostgreSQL
        │
+       ├── Notifier ── phone (ntfy), email, chat
+       │
 FastAPI ──── Next.js dashboard
 ```
 
@@ -131,7 +135,8 @@ FastAPI ──── Next.js dashboard
 | `analysis_service/` | Groups packets into source → destination flows and computes rates, SYN ratio, port diversity and more. |
 | `detection_engine/` | Checks each flow against the rules in `config/detection.toml` and, if trained, the anomaly model. |
 | `alert_service/` | Logs and stores alerts. Repeats of the same threat for the same pair are suppressed for a cooldown window, so a flood produces one alert instead of thousands. |
-| `dashboard-api/` | Read-only REST API for the dashboard. |
+| `notifier/` | Sends new alerts to a phone, email or chat, with quiet hours, an hourly limit and retries. Runs on its own, so a slow channel can't hold up detection. |
+| `dashboard-api/` | REST API for the dashboard. |
 | `dashboard/` | Next.js dashboard. |
 | `common/` | Small pieces shared between services: what counts as a hostname, how on/off settings are read, and the database migration runner. |
 | `database/migrations/` | The database schema, as numbered SQL files applied in order when the services start. |
@@ -313,6 +318,11 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `ALERT_COOLDOWN_SECONDS` | from `detection.toml` | Overrides the alert de-duplication window |
 | `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
+| `COMPOSE_PROFILES` | | `ntfy` starts your own ntfy server with `make up` ([Notifications](#notifications)) |
+| `NTFY_TOPIC`, `NTFY_TOKEN` | | Your ntfy topic, and the token the notifier posts with. `make notify-setup` creates both |
+| `NTFY_BASE_URL`, `NTFY_PORT` | , `8090` | Your ntfy server's address as your phone reaches it, and its port |
+| `SMTP_PASSWORD` | | Password for `[email]` in `config/notifications.toml` |
+| `WEBHOOK_URL` | | The webhook for `[webhook]` (Discord, Slack, Telegram or other). It contains a secret token |
 
 ### Dashboard password
 
@@ -342,7 +352,8 @@ it from your phone or laptop:
 3. Run `make up`.
 
 Then open `http://<this machine's address>:3001` on the other device and log in.
-Only the dashboard's port opens. The API, Postgres and Redis stay on this
+Only the dashboard's port opens (and your ntfy server's, if you run one for
+[notifications](#notifications)). The API, Postgres and Redis stay on this
 machine; the dashboard reaches the API inside Docker.
 
 If no password is set, the API refuses to start, so the dashboard shows
@@ -374,6 +385,97 @@ dashboard at that address too, not `localhost`; and if Tailscale isn't
 connected when SentinelAI starts (after a reboot, say), the dashboard doesn't
 start and stays down until you run `make up` again.
 
+## Notifications
+
+SentinelAI can tell your phone, your email or a chat when it raises an alert.
+It's off until you turn it on. Settings are in
+[`config/notifications.toml`](config/notifications.toml), and passwords and
+tokens in `.env`.
+
+**What's sent**
+
+- **High-severity alerts**, unless you lower `min_severity`. Each one says what
+  happened and between which devices, using the names you've given them
+  ("Front door camera"), or a learned hostname with its address next to it,
+  because whoever sent the traffic chose that name. Set `dashboard_url` and
+  each one links straight to the alert in the dashboard.
+- **Once per attack.** An attack that goes on raises an alert about once a
+  minute. After a notification, the same alert again (same kind, same
+  devices) isn't sent for `repeat_minutes` (60). The dashboard still lists
+  every one.
+- **At most `max_per_hour` (10) an hour.** Alerts past that are held, and go
+  out together in one summary when there's room again.
+- **Quiet hours**, if you turn them on. High-severity alerts still come through
+  unless you set `let_high_through = false`. Everything else waits for one
+  summary when quiet hours end.
+- **Nothing old.** Turning notifications on doesn't send alerts already
+  recorded. Alerts the notifier sees late (it was stopped, say) arrive as one
+  summary instead of one by one.
+
+A notification that fails to send is logged and tried again after 30 seconds,
+then 2, 10, 30 and 60 minutes, before it's given up on. The notifier runs as
+its own service, so a slow or broken channel never holds up detection.
+
+Changes to `config/notifications.toml` apply within a few seconds. After
+changing `.env`, run `make up`. To check everything works, run
+`make notify-test`, or open **Notifications** in the dashboard's header and
+click **Send test notification**: it says whether each channel got it.
+
+### On your phone (recommended)
+
+This runs your own [ntfy](https://ntfy.sh) server next to SentinelAI, so the
+alerts stay on your machine. Your phone needs to reach this machine: on your
+own Wi-Fi, or from anywhere [with Tailscale](#from-anywhere-with-tailscale).
+
+1. Install the ntfy app on your phone (App Store or Google Play).
+2. Run `make notify-setup`. It adds a random topic name (`NTFY_TOPIC`), the
+   notifier's token (`NTFY_TOKEN`) and `COMPOSE_PROFILES=ntfy` to `.env`.
+3. In `.env`, set `NTFY_BASE_URL` to this machine's address as your phone
+   reaches it, port 8090, e.g. `http://100.101.102.103:8090` with Tailscale.
+   Your phone has to reach the server, so it also needs
+   `DASHBOARD_BIND=0.0.0.0`, and that needs a dashboard password (see
+   [Opening the dashboard from other devices](#opening-the-dashboard-from-other-devices)).
+4. In `config/notifications.toml`, set `enabled = true` under
+   `[notifications]` and under `[ntfy]`. Set `dashboard_url` too (the
+   dashboard's address, port 3001) and `timezone`.
+5. Run `make up`.
+6. In the ntfy app, subscribe to a topic: choose to use another server, enter
+   `NTFY_BASE_URL`, and the topic from `NTFY_TOPIC` in `.env`.
+7. Run `make notify-test`.
+
+The server refuses everything except reading your topic, which needs no
+login, and the notifier posting to it with its token. Keep the topic name to
+yourself: anyone who can reach port 8090 and knows it can read your alerts.
+
+On iPhones, Apple only delivers notifications through its own servers. So
+your ntfy server asks the public one at ntfy.sh to wake the app, sending only
+a message ID and a hash of the topic, and the app then fetches the alert from
+your server. The alert itself doesn't pass through ntfy.sh.
+
+### Email
+
+Fill in `[email]` in `config/notifications.toml` (server, port, username,
+from and to), put the password in `.env` as `SMTP_PASSWORD`, and set
+`enabled = true`. Most providers use port 587. For Gmail, use
+`smtp.gmail.com` and an [app password](https://support.google.com/accounts/answer/185833),
+not your account password.
+
+### Discord, Slack, Telegram or anything else
+
+Put the webhook URL in `.env` as `WEBHOOK_URL`, and under `[webhook]` set
+`format` and `enabled = true`.
+
+| Service | `format` | `WEBHOOK_URL` |
+|---------|----------|---------------|
+| Discord | `discord` | Channel settings → Integrations → Webhooks → copy the URL |
+| Slack | `slack` | An [incoming webhook](https://api.slack.com/messaging/webhooks) |
+| Telegram | `telegram` | `https://api.telegram.org/bot<token>/sendMessage`, with a bot from @BotFather; also set `telegram_chat_id` |
+| Anything else | `json` | Receives a POST of `{"title", "body", "severity", "url"}` |
+
+**Privacy:** email, Discord, Slack and Telegram store your alerts on their
+servers, including your devices' addresses and names. Set `ips_only = true`
+to send addresses only, without device names or hostnames.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -382,6 +484,8 @@ start and stays down until you run `make up` again.
 | "Waiting for network traffic" | Capture isn't running. Start it with `make capture`, or run `make demo`. |
 | `make capture` fails with an interface error | `CAPTURE_INTERFACE` in `.env` doesn't match an interface on your machine (see the table above). |
 | Normal activity keeps getting flagged | Raise the relevant threshold in `config/detection.toml`, then `make restart`. |
+| No notifications arrive | Open **Notifications** in the dashboard's header: it says what's wrong (notifier stopped, a setting to fix, a channel failing). `make notify-test` checks each channel. |
+| ntfy app can't connect | Your phone can't reach this machine at `NTFY_BASE_URL`: check `DASHBOARD_BIND=0.0.0.0`, that the address is right, and that Tailscale is on, if you use it. |
 | Lots of "Unusual traffic" alerts | The anomaly model was trained on too little traffic. Record for longer with `make train-collect`, then `make train-model` and `make restart`, or switch the model off (see above). |
 
 ## API
@@ -396,7 +500,10 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
 | `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
 | `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |
+| `GET /alerts/{id}` | One alert (notifications link to it) |
 | `GET /alerts/summary?hours=24` | Alert counts by type |
+| `GET /notifications` | Whether notifications are on, the channels, what was last sent, anything failing, and the latest test's result per channel |
+| `POST /notifications/test` | Send a test notification to every channel that's turned on |
 | `GET /top-ips?hours=24` | Sources with the most alerts |
 | `GET /traffic/live` | Redis stream statistics |
 
