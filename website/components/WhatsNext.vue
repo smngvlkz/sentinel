@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { BellRing, Cpu, Sparkles } from "lucide-vue-next";
+import { Cpu, Sparkles } from "lucide-vue-next";
 import { next, site, type NextIcon } from "~/data/site";
 
-const icons: Record<NextIcon, unknown> = { cpu: Cpu, bell: BellRing, sparkles: Sparkles };
+const icons: Record<NextIcon, unknown> = { cpu: Cpu, sparkles: Sparkles };
+// One column per planned item, so the grid never ends in an empty cell.
+const columns = next.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2";
 </script>
 
 <template>
@@ -13,7 +15,7 @@ const icons: Record<NextIcon, unknown> = { cpu: Cpu, bell: BellRing, sparkles: S
         title="Planned, not built yet."
         lead="None of this exists today. Each has a written plan, with what it must do before it ships."
       />
-      <div class="mt-12 grid gap-px overflow-hidden rounded-xl border border-line bg-line md:grid-cols-3">
+      <div class="mt-12 grid gap-px overflow-hidden rounded-xl border border-line bg-line" :class="columns">
         <article v-for="n in next" :key="n.title" class="bg-bg p-6 transition-colors duration-200 hover:bg-bg-3">
           <div class="flex items-center justify-between gap-3">
             <component :is="icons[n.icon]" class="size-5 text-fg-3" :stroke-width="1.5" aria-hidden="true" />
