@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   Activity,
   Gauge,
@@ -149,6 +150,19 @@ export function Address({
 }) {
   const portSuffix =
     port && port !== "0" ? <span className="text-fg-3">:{port}</span> : null;
+  // An address stays in one piece. One too long for a phone's width (a full
+  // IPv6 address) may wrap, but only after a colon, never mid-group.
+  const long = ip.length + (portSuffix ? port!.length + 1 : 0) > 24;
+  const ipWrap = long ? "" : "whitespace-nowrap";
+  const ipText = long
+    ? ip.split(":").map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 && ":"}
+          {i > 0 && <wbr />}
+          {part}
+        </Fragment>
+      ))
+    : ip;
   const label = device || name;
   // Same type as the alert title ("Unusual traffic"): body size, sans, medium.
   const hostLabel = (
@@ -157,16 +171,16 @@ export function Address({
     </span>
   );
   const ipLine = (
-    <span className="font-mono text-xs text-fg-3">
-      {ip}
+    <span className={`font-mono text-xs text-fg-3 ${ipWrap}`}>
+      {ipText}
       {portSuffix}
     </span>
   );
 
   if (!label) {
     return (
-      <span className="font-mono text-[13px] break-all sm:whitespace-nowrap">
-        {ip}
+      <span className={`font-mono text-[13px] ${ipWrap}`}>
+        {ipText}
         {portSuffix}
       </span>
     );
@@ -174,17 +188,17 @@ export function Address({
 
   if (layout === "banner") {
     return (
-      <span className="inline-block max-w-full align-baseline break-words [overflow-wrap:anywhere] sm:whitespace-nowrap">
-        <span className="font-medium">{label}</span>
+      <span className="sm:whitespace-nowrap">
+        <span className="font-medium break-words [overflow-wrap:anywhere]">{label}</span>
         <span className="text-fg-3"> · </span>
-        <span className="font-mono text-xs break-all text-fg-3 [overflow-wrap:anywhere] sm:break-normal">{ip}</span>
+        <span className={`font-mono text-xs text-fg-3 ${ipWrap}`}>{ipText}</span>
       </span>
     );
   }
 
   if (layout === "inline") {
     return (
-      <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5">
+      <span className="inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5">
         {hostLabel}
         {ipLine}
       </span>

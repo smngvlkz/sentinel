@@ -141,3 +141,36 @@ export const reviewAlerts = (
   body: { reviewed?: boolean } & ({ ids: number[] } | { hours: number; severity?: Severity }),
 ) =>
   post<{ updated: number }>("/alerts/review", body);
+
+/** One alert by id, for links from notifications (/?alert=<id>). */
+export const fetchAlert = (id: number) => request<Alert>(`/alerts/${id}`);
+
+export type NotificationChannel = "ntfy" | "email" | "webhook";
+
+export interface ChannelResult {
+  channel: NotificationChannel;
+  /** pending: not sent yet, or waiting to retry. failed: gave up. */
+  status: "pending" | "sent" | "failed";
+  attempts: number;
+  last_error: string | null;
+}
+
+export interface NotificationStatus {
+  /** The notifier has reported in the last 30 seconds. */
+  running: boolean;
+  /** Turned on in config/notifications.toml, with no problem in the file. */
+  enabled: boolean;
+  /** What's wrong with config/notifications.toml, if anything. */
+  error: string | null;
+  channels: NotificationChannel[];
+  min_severity: Severity | null;
+  quiet_now: boolean;
+  last_sent: { channel: NotificationChannel; kind: string; sent_at: string; title: string } | null;
+  sent_24h: number;
+  /** The newest message in the last day that hasn't got through. */
+  problem: (ChannelResult & { created_at: string; next_attempt_at: string }) | null;
+  last_test: { requested_at: string; handled_at: string | null; results: ChannelResult[] } | null;
+}
+
+export const fetchNotifications = () => request<NotificationStatus>("/notifications");
+export const sendTestNotification = () => post<{ requested_at: string }>("/notifications/test", {});
