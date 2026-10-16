@@ -121,14 +121,16 @@ def test_test_button(app):
     ]
 
 
+# The heartbeat is built when the test runs, not when the file is collected: it
+# must be under 30 seconds old, and a slow suite can take longer than that.
 @pytest.mark.parametrize("state, message", [
     (None, "isn't running"),
-    (beat(error="min_severity must be one of high, medium, low"), "needs fixing"),
-    (beat(channels=[]), "No channel"),
+    ({"error": "min_severity must be one of high, medium, low"}, "needs fixing"),
+    ({"channels": []}, "No channel"),
 ])
 def test_test_button_explains_why_it_cant(app, state, message):
     client, cur, redis = app
-    redis.beat = state
+    redis.beat = None if state is None else beat(**state)
     r = client.post("/notifications/test", json={})
     assert r.status_code == 409 and message in r.json()["detail"]
     cur.execute("SELECT count(*) FROM notification_tests")
