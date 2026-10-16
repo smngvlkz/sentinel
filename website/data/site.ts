@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.6.2",
+  version: "0.6.3",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -139,7 +139,7 @@ export const resultNotes: string[] = [
   "In 0.6.2, browsers opening many connections at once and quick bursts of lookups to an office server stopped raising false alarms, and floods that repeat after a pause stopped being missed. Every number on these tabs is measured with those rules. Normal machines are counted on each day leaving out every machine involved in a labelled attack.",
 ];
 
-export type FeatureIcon = "radar" | "message" | "tag" | "check" | "shuffle" | "gauge" | "lock" | "play";
+export type FeatureIcon = "radar" | "message" | "bell" | "tag" | "check" | "shuffle" | "gauge" | "lock" | "play";
 
 export type Feature = { tag: string; icon: FeatureIcon; title: string; body: string; points?: string[] };
 
@@ -161,6 +161,18 @@ export const features: Feature[] = [
     icon: "message",
     title: "Alerts in plain language",
     body: "Every alert says what happened, whether the source is on your network or the internet, the evidence behind it, and what to do next.",
+  },
+  {
+    tag: "Notifications",
+    icon: "bell",
+    title: "Alerts on your phone",
+    body: "High-severity alerts reach your phone in seconds, through your own ntfy server, email, Discord, Slack or Telegram. Each one names the devices involved and opens the alert in the dashboard.",
+    points: [
+      "Once per attack: an attack that goes on doesn't buzz your phone every minute",
+      "At most 10 an hour, with the rest in one summary, and optional quiet hours",
+      "Your own ntfy server keeps alerts on your machine, locked so only your phone can read them",
+      "A failed send is retried, and never holds up detection",
+    ],
   },
   {
     tag: "Names",
@@ -201,7 +213,7 @@ export const features: Feature[] = [
     tag: "Privacy",
     icon: "lock",
     title: "Private by design",
-    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on this machine only, unless you set a password and open the dashboard to your phone. No account, no cloud.",
+    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on this machine only, unless you set a password and open the dashboard to your phone. Notifications go to your own ntfy server unless you choose email or a chat app. No account, no cloud.",
   },
   {
     tag: "Demo",
@@ -211,7 +223,7 @@ export const features: Feature[] = [
   },
 ];
 
-export type NextIcon = "cpu" | "bell" | "sparkles";
+export type NextIcon = "cpu" | "sparkles";
 
 export type NextItem = { icon: NextIcon; title: string; body: string };
 
@@ -221,11 +233,6 @@ export const next: NextItem[] = [
     icon: "cpu",
     title: "Raspberry Pi installer",
     body: "A Raspberry Pi 4 or 5 on a mirror port of your switch, watching every device and starting on boot.",
-  },
-  {
-    icon: "bell",
-    title: "Phone notifications",
-    body: "High-severity alerts through ntfy, email or a webhook, with quiet hours and rate limits.",
   },
   {
     icon: "sparkles",
