@@ -281,13 +281,21 @@ class TestOpeningToOtherDevices:
         assert r.status_code == 503 and "make password" in r.json()["detail"]
         assert new_client().get("/devices").status_code == 503
 
-    def test_only_the_dashboards_port_follows_the_setting(self):
-        """The API, Postgres and Redis stay on this machine whatever DASHBOARD_BIND says."""
+    def test_only_the_dashboard_and_ntfy_ports_follow_the_setting(self):
+        """
+        The API, Postgres and Redis stay on this machine whatever DASHBOARD_BIND
+        says. ntfy follows it because the phone has to reach it, so it must
+        refuse everything but reading the topic and the notifier's token.
+        """
         path = os.path.join(os.path.dirname(__file__), "..", "docker", "docker-compose.yml")
-        ports = [line.strip() for line in open(path) if line.strip().startswith('- "') and ":" in line]
+        text = open(path).read()
+        ports = [line.strip() for line in text.splitlines() if line.strip().startswith('- "') and ":" in line]
         assert '- "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_UI_PORT:-3001}:3000"' in ports
-        others = [p for p in ports if "DASHBOARD_UI_PORT" not in p]
+        assert '- "${DASHBOARD_BIND:-127.0.0.1}:${NTFY_PORT:-8090}:80"' in ports
+        others = [p for p in ports if "DASHBOARD_UI_PORT" not in p and "NTFY_PORT" not in p]
         assert len(others) == 3 and all(p.startswith('- "127.0.0.1:') for p in others), others
+        assert "NTFY_AUTH_DEFAULT_ACCESS: deny-all" in text
+        assert 'NTFY_AUTH_ACCESS: "*:${NTFY_TOPIC:-}:read-only,sentinel-notifier:${NTFY_TOPIC:-}:write-only"' in text
 
 
 def test_starts_while_the_database_is_down(monkeypatch):
