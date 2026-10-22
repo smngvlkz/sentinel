@@ -8,8 +8,8 @@ the risks or open questions. The order matters and is explained as it goes.
 
 ## Where things stand
 
-- Detection: nine rules, including a list of known botnet servers (the
-  botnet check-in rule off by default), plus an
+- Detection: nine rules, including an optional list of known botnet
+  servers (the botnet check-in rule off by default), plus an
   optional anomaly model. Evaluated on three days of CIC-IDS2017, two of
   them held out, and for 24 hours on a real laptop. See
   [evaluation.md](evaluation.md).
@@ -265,7 +265,7 @@ rules are medium severity, so they'd never reach a phone by default.
   device. Tested on botnet and normal captures it wasn't built on, plus 48
   hours on a Mac, false alarms fell to one in 48 hours, but it flagged bots
   that don't check in on a timer much later, so it stays off by default. A
-  list of known botnet servers now covers part of that gap, on by default.
+  list of known botnet servers now covers part of that gap, for anyone who adds a free abuse.ch key.
   See [evaluation.md](evaluation.md).
 - **Later, a separate rule: a device sending mail to many mail servers.**
   Some bots send spam rather than checking in on a timer, so the check-in

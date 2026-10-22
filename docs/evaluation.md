@@ -416,7 +416,7 @@ day from an app like your editor than miss a bot on a timer. It won't see
 a bot that randomises its timing, and on Monday the three machines are
 still flagged, just once each instead of 34 alerts.
 
-**The botnet-server list (on by default).** SentinelAI downloads
+**The botnet-server list (optional, needs a free abuse.ch key).** SentinelAI downloads
 abuse.ch's [ThreatFox](https://threatfox.abuse.ch) list of confirmed
 botnet control servers (about 3,400 addresses and ports) every 6 hours,
 and alerts when a device on your network connects to one. With the list

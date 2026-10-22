@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
-from analysis_service.known_servers import CACHE_KEY, NO_KEY, KnownServers, Updater, listed, parse_threatfox
+from analysis_service.known_servers import CACHE_KEY, NO_KEY, KnownServers, Updater, listed, parse_threatfox, start
 from detection_engine.config import DEFAULT_CONFIG_PATH, DEFAULTS, load_config
 from detection_engine.detector import DetectionEngine
 from detection_engine.rules import RuleEngine
@@ -94,11 +94,27 @@ class TestMatching:
         assert FlowTracker().update(packet(0, DEVICE, 50000, C2, 443))["known_server"] == 0.0
 
 
-class TestOnByDefault:
+class TestOptIn:
 
-    def test_default_config_and_shipped_file_turn_it_on(self):
+    def test_on_in_the_config_so_a_key_is_all_it_takes(self):
         assert DEFAULTS["known_servers"]["enabled"] is True
         assert load_config(DEFAULT_CONFIG_PATH)["known_servers"]["enabled"] is True
+
+    @pytest.mark.parametrize("environ", [{}, {"THREATFOX_AUTH_KEY": ""}, {"THREATFOX_AUTH_KEY": "  "}])
+    def test_without_a_key_nothing_starts(self, environ, monkeypatch):
+        monkeypatch.setattr(Updater, "start", lambda self: pytest.fail("started without a key"))
+        assert start(DEFAULTS["known_servers"], FakeRedis(), environ) is None
+
+    def test_turned_off_nothing_starts_even_with_a_key(self, monkeypatch):
+        monkeypatch.setattr(Updater, "start", lambda self: pytest.fail("started while off"))
+        config = {**DEFAULTS["known_servers"], "enabled": False}
+        assert start(config, FakeRedis(), {"THREATFOX_AUTH_KEY": KEY}) is None
+
+    def test_a_key_starts_it(self, monkeypatch):
+        started = []
+        monkeypatch.setattr(Updater, "start", lambda self: started.append(self.auth_key))
+        assert isinstance(start(DEFAULTS["known_servers"], FakeRedis(), {"THREATFOX_AUTH_KEY": KEY}), KnownServers)
+        assert started == [KEY]
 
     def test_silent_when_turned_off(self):
         config = copy.deepcopy(DEFAULTS)
