@@ -12,7 +12,7 @@
 
 export const site = {
   name: "SentinelAI",
-  version: "0.6.3",
+  version: "0.6.4",
   repo: "https://github.com/smngvlkz/sentinel",
   evaluationDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/evaluation.md",
   roadmapDoc: "https://github.com/smngvlkz/sentinel/blob/master/docs/ROADMAP.md",
@@ -136,6 +136,7 @@ export const resultNotes: string[] = [
   "An earlier version of these results had a scoring bug, found by the held-out Wednesday test. The numbers here are the corrected ones.",
   "Thursday's infiltration scores 0% because the dataset labels only 36 of its flows as attacks. SentinelAI did flag it: the infected machine scanning the whole network raised port-scan and connection-flood alerts on every machine it scanned. Those count as false alarms above, because the dataset labels the scan as normal.",
   "Tuesday's password guessing and Thursday's web attacks aren't caught by any rule: repeated logins look like normal connections, and web attacks live in page contents, which SentinelAI doesn't read.",
+  "In 0.6.4 the check-in rule also needs regular timing and alerts once a day per device: on Monday it raised 3 alerts instead of 34, on the same machines. In 48 hours on a real Mac it raised one. It's still off by default, because it flagged some unseen bots much later. These tabs still show 0.6.2's rules.",
   "In 0.6.2, browsers opening many connections at once and quick bursts of lookups to an office server stopped raising false alarms, and floods that repeat after a pause stopped being missed. Every number on these tabs is measured with those rules. Normal machines are counted on each day leaving out every machine involved in a labelled attack.",
 ];
 
@@ -148,11 +149,12 @@ export const features: Feature[] = [
     tag: "Detection",
     icon: "radar",
     title: "Detection rules you can read",
-    body: "Eight rules, each a few lines of Python with thresholds in one config file.",
+    body: "Nine rules, each a few lines of Python with thresholds in one config file.",
     points: [
       "Port scans and network sweeps",
       "Connection floods, request floods and distributed floods",
       "Traffic bursts and oversized packets",
+      "Connections to known botnet servers, from abuse.ch's ThreatFox list (optional: needs a free abuse.ch key)",
       "Regular check-ins, the pattern botnets use to reach their controller (off by default: everyday apps do it too)",
     ],
   },
@@ -213,7 +215,7 @@ export const features: Feature[] = [
     tag: "Privacy",
     icon: "lock",
     title: "Private by design",
-    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on this machine only, unless you set a password and open the dashboard to your phone. Notifications go to your own ntfy server unless you choose email or a chat app. No account, no cloud.",
+    body: "Everything runs on your hardware. By default it reads packet headers, not contents; optional hostname learning reads only DNS answers, HTTP Host headers and TLS server names. Every service listens on this machine only, unless you set a password and open the dashboard to your phone. Notifications go to your own ntfy server unless you choose email or a chat app. Nothing is downloaded unless you turn on the optional botnet-server list. No account, no cloud.",
   },
   {
     tag: "Demo",

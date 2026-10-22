@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-22
+
 ### Added
 
 - Known botnet servers (optional): a high-severity **Known botnet server**
@@ -425,7 +427,8 @@ First public release.
 - Evaluation against CIC-IDS2017, with results in
   [docs/evaluation.md](docs/evaluation.md).
 
-[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/smngvlkz/sentinel/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/smngvlkz/sentinel/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/smngvlkz/sentinel/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/smngvlkz/sentinel/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/smngvlkz/sentinel/compare/v0.6.0...v0.6.1
