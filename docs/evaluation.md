@@ -377,6 +377,54 @@ infected machine on Friday, so it's there for anyone who would rather have
 noisy alerts than miss a bot. All the results on this page were measured
 with it switched on.
 
+### Botnets: the check-in rule and the botnet-server list
+
+CIC-IDS2017 has one botnet, so the check-in rule was reworked and tested on
+other data: [CTU-13](https://www.stratosphereips.org/datasets-ctu13) and
+the Stratosphere Lab's malware and normal captures, plus 48 hours on a real
+Mac. Each test's data was chosen and its targets written down before any
+of it was opened, and each was run once. Two attempts failed, and they're
+reported here too.
+
+**Attempt 1: ignore web ports (failed).** All the laptop's false alarms
+were apps polling over HTTPS, so the first idea was to stop alerting on
+ports 80 and 443. On CTU-13 it cut false alarms on normal machines from 225
+to 0 and caught the same 13 bots, but one a little later. On 30 more recent
+malware captures it caught 3 infected machines where the old rule caught
+10: most bots check in over the web ports. Dropped.
+
+**Attempt 2: regular timing (current, off by default).** A bot sleeps a
+fixed time between check-ins; an app reconnects whenever you do something.
+The rule now also needs at least 40% of the hour's gaps to be close to the
+usual gap (within 10%, or 2 seconds), and repeats at most once a day per
+device rather than hourly per server.
+
+| | Old rule | Current rule | Target |
+|---|---|---|---|
+| Infected machines flagged, 30 unseen malware captures | 10 | 9 | at least 9 ✓ |
+| Median time to first alert, the 9 flagged by both | 57 min | 238 min | at most 72 min ✗ |
+| Check-in alerts in 48 hours on a real Mac | 4 | 1 (the Cursor editor) | at most 1 a day ✓ |
+| Check-in alerts on 18 normal users' captures | 36 | 0 | at most 1 per machine per day ✓ |
+| CIC-IDS2017 Friday's five bots (seen before) | 5 of 5 | 5 of 5, same times | |
+| CIC-IDS2017 Monday, no attacks (seen before) | 34 alerts on 3 machines | 3 alerts on the same 3 machines | |
+
+It missed the speed target. Six of the nine bots were flagged at the same
+time, but the late and missed ones weren't checking in on a timer: they
+were sending spam or hammering web servers, traffic as irregular as an
+app's. So it's off by default. Turn it on if you'd rather have an alert a
+day from an app like your editor than miss a bot on a timer. It won't see
+a bot that randomises its timing, and on Monday the three machines are
+still flagged, just once each instead of 34 alerts.
+
+**The botnet-server list (on by default).** SentinelAI downloads
+abuse.ch's [ThreatFox](https://threatfox.abuse.ch) list of confirmed
+botnet control servers (about 3,400 addresses and ports) every 6 hours,
+and alerts when a device on your network connects to one. With the list
+frozen as it stood when the home capture ended, it matched nothing in 48
+hours on the Mac or in the 18 normal users' captures. How many bots it
+catches can't be measured on old captures, because the servers in them
+have long since left the list. It only knows servers someone has reported.
+
 ### Friday: tuned on the same day
 
 | Attack | Flows | Detected | Minutes caught |

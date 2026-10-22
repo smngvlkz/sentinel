@@ -19,11 +19,12 @@ log = logging.getLogger(__name__)
 # Rules judged on a whole connection rather than a one-way flow. Their alerts
 # name the connection's initiator as the source, whichever direction the
 # triggering packet went.
-CONNECTION_RULES = {"REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "BEACONING"}
+CONNECTION_RULES = {"REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "BEACONING", "KNOWN_BOTNET_SERVER"}
 
 # How repeat alerts are grouped: one distributed-flood alert per victim, not
-# one per attacking host; one sweep alert per scanner, not one per target.
-ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source"}
+# one per attacking host; one sweep alert per scanner, not one per target;
+# one check-in alert per device, not one per server it checks in with.
+ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "BEACONING": "source"}
 
 
 class DetectionEngine:
@@ -57,8 +58,17 @@ class DetectionEngine:
             if rule_name in ALERT_GROUP:
                 threat["group"] = ALERT_GROUP[rule_name]
             if rule_name == "BEACONING":
-                # An ongoing condition: repeat the alert hourly, not every minute.
+                # An ongoing condition: repeat it per device (daily by default), not every minute.
                 threat["cooldown"] = float(self.config["beaconing"]["repeat_alert_seconds"])
+            if rule_name == "KNOWN_BOTNET_SERVER":
+                # The device is the source and the listed server the destination,
+                # whichever end opened the connection.
+                if features.get("known_server_is_initiator"):
+                    threat.update({
+                        "source_ip": threat["destination_ip"], "source_port": threat["destination_port"],
+                        "destination_ip": threat["source_ip"], "destination_port": threat["source_port"],
+                    })
+                threat["cooldown"] = float(self.config["known_servers"]["repeat_alert_seconds"])
             threats.append(threat)
 
         # The model judges a flow by its rates, which are meaningless for a

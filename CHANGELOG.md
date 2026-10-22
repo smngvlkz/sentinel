@@ -6,6 +6,26 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Known botnet servers: SentinelAI downloads abuse.ch's ThreatFox list of
+  confirmed botnet control servers every 6 hours and raises a high-severity
+  **Known botnet server** alert when a device on your network connects to
+  one. On by default: in 48 hours on a real Mac and on 18 captures of
+  normal users' traffic it raised no false alarms. Nothing about your
+  network is sent; `enabled = false` under `[known_servers]` stops the
+  downloads. The list's size, age and any download error show on `/health`.
+
+### Changed
+
+- The check-in rule (still off by default) now also needs regular timing:
+  at least 40% of the hour's check-ins at the usual interval
+  (`min_regularity`). It alerts at most once a day per device, instead of
+  hourly per server. False alarms fell to one in 48 hours on a real Mac and
+  none on 18 normal users' captures, but on unseen malware it flagged bots
+  that weren't checking in on a timer much later, so it stays off. Results
+  in docs/evaluation.md.
+
 ## [0.6.3] - 2026-10-16
 
 ### Added

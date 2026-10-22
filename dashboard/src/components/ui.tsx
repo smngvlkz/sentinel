@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import {
   Activity,
+  Bug,
   Gauge,
   Network,
   Package,
@@ -114,6 +115,7 @@ const THREAT_ICON: Record<string, LucideIcon> = {
   DISTRIBUTED_FLOOD: Network,
   NETWORK_SWEEP: Waypoints,
   BEACONING: RadioTower,
+  KNOWN_BOTNET_SERVER: Bug,
   RESOURCE_PRESSURE: Gauge,
 };
 

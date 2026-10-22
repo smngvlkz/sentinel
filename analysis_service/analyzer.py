@@ -22,6 +22,7 @@ from analysis_service.feature_extractor import FlowTracker
 from analysis_service.gc_tuning import FullCollector, tune_gc
 from analysis_service.pressure import PressureMonitor
 from analysis_service.tables import TableReport, Tables
+from analysis_service.known_servers import KnownServers, Updater
 from analysis_service.names import NameCache
 from common.flags import env_flag
 from detection_engine.config import load_config
@@ -128,6 +129,7 @@ def send_heartbeat(
     model_loaded: bool,
     tables: dict[str, dict[str, int]] | None = None,
     lost_unread: int | None = None,
+    known_servers: dict[str, object] | None = None,
 ) -> None:
     try:
         r.set(
@@ -139,6 +141,7 @@ def send_heartbeat(
                 "model_loaded": model_loaded,
                 "tables": tables or {},
                 "lost_unread": lost_unread,
+                "known_servers": known_servers,
             }),
             ex=HEARTBEAT_TTL,
         )
@@ -173,7 +176,18 @@ def main() -> None:
         else None
     )
 
-    tracker = FlowTracker(limits=config["limits"], handshake_seconds=config["syn_flood"]["handshake_seconds"])
+    known_cfg = config["known_servers"]
+    known_servers = KnownServers() if known_cfg["enabled"] else None
+    if known_servers is not None:
+        Updater(
+            known_servers, r, refresh_hours=known_cfg["refresh_hours"], min_confidence=known_cfg["min_confidence"]
+        ).start()
+
+    tracker = FlowTracker(
+        limits=config["limits"],
+        handshake_seconds=config["syn_flood"]["handshake_seconds"],
+        known_servers=known_servers,
+    )
     detector = DetectionEngine()
     alerts = AlertManager()
     retention = config["retention"]
@@ -244,7 +258,10 @@ def main() -> None:
                 lost = stream_loss.since_start(r, processed)
             except redis.RedisError:
                 lost = None
-            send_heartbeat(r, started_at, processed, model_loaded, table_report.report(now), lost)
+            send_heartbeat(
+                r, started_at, processed, model_loaded, table_report.report(now), lost,
+                known_servers.status() if known_servers is not None else None,
+            )
             last_heartbeat = now
 
         if now - last_cleanup > CLEANUP_INTERVAL:
