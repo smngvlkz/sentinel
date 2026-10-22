@@ -57,6 +57,8 @@ services:
       ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-}
       # Overrides [names] enabled in detection.toml; `make demo` sets it.
       NAMES_ENABLED: ${NAMES_ENABLED:-}
+      # Downloads the known botnet server list ([known_servers]).
+      THREATFOX_AUTH_KEY: ${THREATFOX_AUTH_KEY:-}
     volumes:
       - ../ml-models/saved:/app/ml-models/saved:ro
       - ../config:/app/config:ro

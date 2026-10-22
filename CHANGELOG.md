@@ -11,7 +11,8 @@ uses [Semantic Versioning](https://semver.org/).
 - Known botnet servers: SentinelAI downloads abuse.ch's ThreatFox list of
   confirmed botnet control servers every 6 hours and raises a high-severity
   **Known botnet server** alert when a device on your network connects to
-  one. On by default: in 48 hours on a real Mac and on 18 captures of
+  one. The download needs a free abuse.ch Auth-Key: set
+  `THREATFOX_AUTH_KEY` in `.env` (see `.env.example`). On by default: in 48 hours on a real Mac and on 18 captures of
   normal users' traffic it raised no false alarms. Nothing about your
   network is sent; `enabled = false` under `[known_servers]` stops the
   downloads. The list's size, age and any download error show on `/health`.

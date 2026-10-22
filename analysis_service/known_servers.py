@@ -7,8 +7,9 @@ one is the clearest sign of infection SentinelAI can see from headers alone,
 and it catches what the check-in rule can't: a bot checking in over HTTPS
 looks exactly like an app by its timing, but not by where it goes.
 
-The list is downloaded every few hours (nothing about this network is sent;
-abuse.ch only sees the request). It's kept in Redis so a restart doesn't need
+The list is downloaded every few hours with a free abuse.ch Auth-Key
+(THREATFOX_AUTH_KEY); nothing about this network is sent, abuse.ch only sees
+the request. It's kept in Redis so a restart doesn't need
 the internet. If a download fails, the last good list stays in use, and its
 age is reported in the heartbeat so a stale list is visible.
 
@@ -24,14 +25,18 @@ import json
 import logging
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Iterable
 
 log = logging.getLogger(__name__)
 
-THREATFOX_URL = "https://threatfox.abuse.ch/export/csv/ip-port/recent/"
+# The last 48 hours of all IOC types; only ip:port botnet controllers are kept.
+THREATFOX_URL = "https://threatfox-api.abuse.ch/v2/files/exports/{key}/recent.csv"
+AUTH_KEY_ENV = "THREATFOX_AUTH_KEY"
+NO_KEY = f"needs a free abuse.ch Auth-Key: set {AUTH_KEY_ENV} in .env, then make up"
 CACHE_KEY = "sentinel:known_servers"
-# The export is under 1 MB; refuse anything absurd.
+# The export is about 2 MB; refuse anything absurd.
 MAX_BYTES = 20_000_000
 
 ServerKey = tuple[str, str]  # (ip, port)
@@ -99,6 +104,7 @@ class Updater(threading.Thread):
         self,
         known: KnownServers,
         redis_client,
+        auth_key: str = "",
         url: str = THREATFOX_URL,
         refresh_hours: float = 6.0,
         min_confidence: int = 75,
@@ -107,6 +113,7 @@ class Updater(threading.Thread):
         super().__init__(daemon=True, name="known-servers")
         self.known = known
         self.redis = redis_client
+        self.auth_key = auth_key.strip()
         self.url = url
         self.refresh = max(1.0, float(refresh_hours)) * 3600
         self.min_confidence = int(min_confidence)
@@ -127,13 +134,21 @@ class Updater(threading.Thread):
         return True
 
     def update(self) -> bool:
+        if not self.auth_key:
+            self.known.error = NO_KEY
+            log.warning("known-server list: %s", NO_KEY)
+            return False
         try:
-            text = self.fetch(self.url)
+            text = self.fetch(self.url.format(key=self.auth_key))
             servers = parse_threatfox(text, self.min_confidence)
             if not servers:
                 raise ValueError("the list was empty")
         except Exception as e:  # noqa: BLE001 - keep the last good list
-            self.known.error = f"couldn't download the list: {e}"
+            # The key is part of the URL; keep it out of the logs and /health.
+            reason = str(e).replace(self.auth_key, "<key>")
+            if isinstance(e, urllib.error.HTTPError) and e.code in (401, 403):
+                reason += f" (abuse.ch didn't accept the Auth-Key; check {AUTH_KEY_ENV} in .env)"
+            self.known.error = f"couldn't download the list: {reason}"
             log.warning("known-server list: %s", self.known.error)
             return False
         now = time.time()
@@ -150,6 +165,10 @@ class Updater(threading.Thread):
 
     def run(self) -> None:
         self.load_cached()
+        if not self.auth_key:
+            # The key only comes from the environment, so retrying can't help.
+            self.update()
+            return
         while True:
             if self.due(time.time()):
                 self.update()

@@ -1,6 +1,7 @@
 """Known botnet servers: the ThreatFox list, matching connections to it, and keeping it current."""
 
 import copy
+import urllib.error
 import json
 import os
 import sys
@@ -10,12 +11,13 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
-from analysis_service.known_servers import CACHE_KEY, KnownServers, Updater, listed, parse_threatfox
+from analysis_service.known_servers import CACHE_KEY, NO_KEY, KnownServers, Updater, listed, parse_threatfox
 from detection_engine.config import DEFAULT_CONFIG_PATH, DEFAULTS, load_config
 from detection_engine.detector import DetectionEngine
 from detection_engine.rules import RuleEngine
 
 DEVICE, C2 = "192.168.1.20", "198.51.100.66"
+KEY = "test-key-0123"
 
 EXPORT = """################################################################
 # ThreatFox IOCs: recent ip-port - CSV format                  #
@@ -121,33 +123,74 @@ class TestUpdater:
 
     def test_download_replaces_the_list_and_caches_it(self):
         known, redis = KnownServers(), FakeRedis()
-        assert Updater(known, redis, fetch=lambda url: EXPORT).update()
+        assert Updater(known, redis, auth_key=KEY, fetch=lambda url: EXPORT).update()
         assert known.match(C2, "443") == "QakBot" and known.error is None
         assert json.loads(redis.data[CACHE_KEY])["text"] == EXPORT
 
     def test_a_failed_download_keeps_the_last_good_list(self):
         known, redis = KnownServers(), FakeRedis()
-        Updater(known, redis, fetch=lambda url: EXPORT).update()
+        Updater(known, redis, auth_key=KEY, fetch=lambda url: EXPORT).update()
 
         def offline(url):
             raise OSError("network is unreachable")
 
-        assert not Updater(known, redis, fetch=offline).update()
+        assert not Updater(known, redis, auth_key=KEY, fetch=offline).update()
         assert known.match(C2, "443") == "QakBot"
         assert "network is unreachable" in known.error
 
     def test_an_empty_download_doesnt_wipe_the_list(self):
         known, redis = KnownServers(), FakeRedis()
-        Updater(known, redis, fetch=lambda url: EXPORT).update()
-        assert not Updater(known, redis, fetch=lambda url: "# nothing\n").update()
+        Updater(known, redis, auth_key=KEY, fetch=lambda url: EXPORT).update()
+        assert not Updater(known, redis, auth_key=KEY, fetch=lambda url: "# nothing\n").update()
         assert len(known.servers) == 2
 
     def test_a_restart_uses_the_cached_list_without_the_internet(self):
         redis = FakeRedis()
-        Updater(KnownServers(), redis, fetch=lambda url: EXPORT).update()
+        Updater(KnownServers(), redis, auth_key=KEY, fetch=lambda url: EXPORT).update()
         known = KnownServers()
         assert Updater(known, redis).load_cached()
         assert known.match(C2, "443") == "QakBot"
+
+    def test_the_key_goes_in_the_url(self):
+        urls = []
+        Updater(KnownServers(), FakeRedis(), auth_key=KEY, fetch=lambda url: urls.append(url) or EXPORT).update()
+        assert urls == [f"https://threatfox-api.abuse.ch/v2/files/exports/{KEY}/recent.csv"]
+
+    def test_without_a_key_it_doesnt_download_and_says_why(self):
+        known = KnownServers()
+
+        def fetch(url):
+            raise AssertionError("downloaded without a key")
+
+        updater = Updater(known, FakeRedis(), auth_key="  ", fetch=fetch)
+        assert not updater.update()
+        updater.run()  # returns rather than retrying forever
+        assert known.error == NO_KEY and "THREATFOX_AUTH_KEY" in known.status()["error"]
+
+    def test_a_cached_list_is_still_used_without_a_key(self):
+        redis = FakeRedis()
+        Updater(KnownServers(), redis, auth_key=KEY, fetch=lambda url: EXPORT).update()
+        known = KnownServers()
+        Updater(known, redis).run()
+        assert known.match(C2, "443") == "QakBot"
+
+    def test_errors_never_show_the_key(self):
+        known = KnownServers()
+
+        def bad(url):
+            raise ValueError(f"unknown url type: {url}")
+
+        Updater(known, FakeRedis(), auth_key=KEY, fetch=bad).update()
+        assert KEY not in known.error and "<key>" in known.error
+
+    def test_a_rejected_key_says_so(self):
+        known = KnownServers()
+
+        def rejected(url):
+            raise urllib.error.HTTPError(url, 401, "Unauthorized", None, None)
+
+        Updater(known, FakeRedis(), auth_key=KEY, fetch=rejected).update()
+        assert "401" in known.error and "THREATFOX_AUTH_KEY" in known.error and KEY not in known.error
 
     @pytest.mark.parametrize("age_hours, due", [(1, False), (7, True)])
     def test_refreshes_every_few_hours(self, age_hours, due):

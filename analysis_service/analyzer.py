@@ -22,7 +22,7 @@ from analysis_service.feature_extractor import FlowTracker
 from analysis_service.gc_tuning import FullCollector, tune_gc
 from analysis_service.pressure import PressureMonitor
 from analysis_service.tables import TableReport, Tables
-from analysis_service.known_servers import KnownServers, Updater
+from analysis_service.known_servers import AUTH_KEY_ENV, KnownServers, Updater
 from analysis_service.names import NameCache
 from common.flags import env_flag
 from detection_engine.config import load_config
@@ -180,7 +180,11 @@ def main() -> None:
     known_servers = KnownServers() if known_cfg["enabled"] else None
     if known_servers is not None:
         Updater(
-            known_servers, r, refresh_hours=known_cfg["refresh_hours"], min_confidence=known_cfg["min_confidence"]
+            known_servers,
+            r,
+            auth_key=os.environ.get(AUTH_KEY_ENV, ""),
+            refresh_hours=known_cfg["refresh_hours"],
+            min_confidence=known_cfg["min_confidence"],
         ).start()
 
     tracker = FlowTracker(
