@@ -31,7 +31,8 @@ DEFAULTS: dict[str, dict[str, float]] = {
         "enabled": False, "min_checkins_per_hour": 30, "min_active_slots": 11, "min_regularity": 0.4,
         "repeat_alert_seconds": 86400,
     },
-    # On by default: no false alarms at home or on 18 normal-user captures (see docs/evaluation.md).
+    # Runs once a THREATFOX_AUTH_KEY is set: no false alarms at home or on 18 normal-user captures
+    # (see docs/evaluation.md).
     "known_servers": {"enabled": True, "refresh_hours": 6, "min_confidence": 75, "repeat_alert_seconds": 3600},
     "rate_evidence": {"min_packets": 10, "min_duration_seconds": 0.1},
     "anomaly": {"judge_interval_seconds": 5},

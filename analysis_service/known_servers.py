@@ -7,9 +7,9 @@ one is the clearest sign of infection SentinelAI can see from headers alone,
 and it catches what the check-in rule can't: a bot checking in over HTTPS
 looks exactly like an app by its timing, but not by where it goes.
 
-The list is downloaded every few hours with a free abuse.ch Auth-Key
-(THREATFOX_AUTH_KEY); nothing about this network is sent, abuse.ch only sees
-the request. It's kept in Redis so a restart doesn't need
+Opt-in: nothing is downloaded until a free abuse.ch Auth-Key is set
+(THREATFOX_AUTH_KEY). Then the list is downloaded every few hours; nothing
+about this network is sent, abuse.ch only sees the request. It's kept in Redis so a restart doesn't need
 the internet. If a download fails, the last good list stays in use, and its
 age is reported in the heartbeat so a stale list is visible.
 
@@ -23,6 +23,7 @@ import csv
 import io
 import json
 import logging
+import os
 import threading
 import time
 import urllib.error
@@ -174,6 +175,28 @@ class Updater(threading.Thread):
                 self.update()
             # After a failure, try again in 10 minutes rather than waiting a full refresh.
             time.sleep(600 if self.known.error else 60)
+
+
+def start(config: dict, redis_client, environ=os.environ) -> KnownServers | None:
+    """
+    Start keeping the list current, if the rule is enabled and a key is set;
+    None otherwise, and nothing is downloaded.
+    """
+    auth_key = environ.get(AUTH_KEY_ENV, "").strip()
+    if not config["enabled"]:
+        return None
+    if not auth_key:
+        log.info("known-server rule off: set %s in .env to turn it on", AUTH_KEY_ENV)
+        return None
+    known = KnownServers()
+    Updater(
+        known,
+        redis_client,
+        auth_key=auth_key,
+        refresh_hours=config["refresh_hours"],
+        min_confidence=config["min_confidence"],
+    ).start()
+    return known
 
 
 def from_file(path: str, min_confidence: int = 75) -> KnownServers:

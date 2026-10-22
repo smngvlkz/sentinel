@@ -8,14 +8,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Known botnet servers: SentinelAI downloads abuse.ch's ThreatFox list of
-  confirmed botnet control servers every 6 hours and raises a high-severity
-  **Known botnet server** alert when a device on your network connects to
-  one. The download needs a free abuse.ch Auth-Key: set
-  `THREATFOX_AUTH_KEY` in `.env` (see `.env.example`). On by default: in 48 hours on a real Mac and on 18 captures of
-  normal users' traffic it raised no false alarms. Nothing about your
-  network is sent; `enabled = false` under `[known_servers]` stops the
-  downloads. The list's size, age and any download error show on `/health`.
+- Known botnet servers (optional): a high-severity **Known botnet server**
+  alert when a device on your network connects to a server on abuse.ch's
+  ThreatFox list of confirmed botnet control servers. To turn it on, set a
+  free abuse.ch Auth-Key as `THREATFOX_AUTH_KEY` in `.env` (see
+  `.env.example`); SentinelAI then downloads the list every 6 hours, and
+  downloads nothing without one. In 48 hours on a real Mac and on 18
+  captures of normal users' traffic it raised no false alarms. Nothing
+  about your network is sent. The list's size, age and any download error
+  show on `/health`.
 
 ### Changed
 

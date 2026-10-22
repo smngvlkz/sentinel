@@ -100,12 +100,12 @@ repeat_alert_seconds = 86400
 # Catches what the check-in rule can't, such as a bot that randomises its
 # timing, but only for servers someone has already reported.
 #
-# SentinelAI downloads the list from abuse.ch every refresh_hours, with a
-# free Auth-Key set as THREATFOX_AUTH_KEY in .env (https://auth.abuse.ch/);
-# without one it can't download the list and stays quiet. Nothing about your
-# network is sent; abuse.ch only sees the download. In 48 hours on a real
-# Mac and on 18 captures of normal users' traffic it matched nothing. Set
-# enabled = false to stop the downloads.
+# Opt-in: it only runs once you set a free abuse.ch Auth-Key as
+# THREATFOX_AUTH_KEY in .env (https://auth.abuse.ch/), then make up. Until
+# then SentinelAI downloads nothing. With a key it downloads the list every
+# refresh_hours; nothing about your network is sent, abuse.ch only sees the
+# download. In 48 hours on a real Mac and on 18 captures of normal users'
+# traffic it matched nothing. enabled = false turns it off even with a key.
 enabled = true
 refresh_hours = 6
 # ThreatFox's confidence that an entry is a botnet server, 0-100.

@@ -10,10 +10,10 @@ Website: [sentinelids.com](https://sentinelids.com).
 
 ![SentinelAI dashboard](docs/SentinelAI.png)
 
-- **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, connections to known botnet servers, plus an optional rule for botnet check-ins.
+- **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, plus optional rules for connections to known botnet servers and for botnet check-ins.
 - **Optional machine-learning model** (Isolation Forest) that learns your network's normal traffic and flags what doesn't fit.
 - **A dashboard that explains itself.** Every alert says what happened, whether the source is on your network or the internet, and what to do next.
-- **Runs locally.** Your traffic never leaves your machine (the only thing it downloads is abuse.ch's list of known botnet servers), and every service listens only on `127.0.0.1` unless you open the dashboard to your other devices, which needs a password.
+- **Runs locally.** Your traffic never leaves your machine (nothing is downloaded either, unless you turn on the optional list of known botnet servers), and every service listens only on `127.0.0.1` unless you open the dashboard to your other devices, which needs a password.
 
 > [!IMPORTANT]
 > **Only monitor networks you own or have explicit permission to monitor.**
@@ -63,10 +63,7 @@ Docker) and needs `sudo`. You'll also need Python 3.12 or newer.
 make setup     # creates .env and a Python virtual environment
 ```
 
-Set `CAPTURE_INTERFACE` in `.env` to the interface you want to watch, and
-`THREATFOX_AUTH_KEY` to a free [abuse.ch Auth-Key](https://auth.abuse.ch/)
-so SentinelAI can download the list of known botnet servers (without it,
-that rule stays quiet):
+Set `CAPTURE_INTERFACE` in `.env` to the interface you want to watch:
 
 | OS    | Find your interfaces                  | Common names              |
 |-------|---------------------------------------|---------------------------|
@@ -155,7 +152,7 @@ FastAPI ──── Next.js dashboard
 | Request flood (`REQUEST_FLOOD`) | One source opening completed connections to one service very fast, e.g. an HTTP flood | > 400 in 10 s |
 | Distributed flood (`DISTRIBUTED_FLOOD`) | Many internet hosts connecting to one of your devices at once | > 50 sources in 60 s |
 | Network sweep (`NETWORK_SWEEP`) | One source contacting many devices on your network on the same port | > 20 devices in 60 s |
-| Known botnet server (`KNOWN_BOTNET_SERVER`) | A device connecting to an address and port on abuse.ch's ThreatFox list of botnet control servers | List refreshed every 6 hours; one alert per device and server per hour |
+| Known botnet server (`KNOWN_BOTNET_SERVER`) | A device connecting to an address and port on abuse.ch's ThreatFox list of botnet control servers | **Optional:** on once you set `THREATFOX_AUTH_KEY`. List refreshed every 6 hours; one alert per device and server per hour |
 | Regular check-ins (`BEACONING`) | A device opening connections to the same internet server throughout the last hour, at regular intervals, like malware checking in | **Off by default.** When on: ≥ 30 check-ins in 11 of 12 five-minute slots, ≥ 40% of them at the usual interval; one alert per device per day |
 | Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
 | Memory limit reached (`RESOURCE_PRESSURE`) | One of SentinelAI's own memory tables fills up and has to forget entries, which takes a flood from tens of thousands of addresses. Detection may be degraded while it lasts | Limits under `[limits]`; at most one alert every 10 minutes |
@@ -166,13 +163,14 @@ Replies from servers you connect to and FTP data connections never count as
 a port scan, and large downloads never count as a traffic burst or an
 oversized packet. UDP port scans aren't detected yet.
 
-The botnet-server list is downloaded from abuse.ch's ThreatFox every 6
-hours with your free Auth-Key (`THREATFOX_AUTH_KEY` in `.env`) and kept in
-Redis, so a restart doesn't need the internet; `/health` shows its size, age
-and any download error, including a missing key. Nothing about your network
-is sent; abuse.ch only sees your account downloading the list.
-It only catches servers someone has already reported. Set `enabled = false`
-under `[known_servers]` to stop the downloads.
+The known botnet server rule is optional and off until you give it a free
+[abuse.ch Auth-Key](https://auth.abuse.ch/): set `THREATFOX_AUTH_KEY` in
+`.env` and run `make up`. SentinelAI then downloads abuse.ch's ThreatFox
+list every 6 hours and keeps it in Redis, so a restart doesn't need the
+internet; `/health` shows its size, age and any download error. Nothing
+about your network is sent; abuse.ch only sees your account downloading
+the list. It raised no false alarms in testing, but only catches servers
+someone has already reported.
 
 The check-in rule is off by default. Its timing test cut false alarms to one
 in 48 hours on a real Mac (the Cursor editor) and none on 18 captures of
@@ -332,7 +330,7 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `ALERT_COOLDOWN_SECONDS` | from `detection.toml` | Overrides the alert de-duplication window |
 | `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
-| `THREATFOX_AUTH_KEY` | | Free abuse.ch Auth-Key for downloading the known botnet server list ([get one](https://auth.abuse.ch/)). Without it that rule stays quiet. |
+| `THREATFOX_AUTH_KEY` | | Free abuse.ch Auth-Key for downloading the known botnet server list ([get one](https://auth.abuse.ch/)). Setting it turns that rule on. |
 | `COMPOSE_PROFILES` | | `ntfy` starts your own ntfy server with `make up` ([Notifications](#notifications)) |
 | `NTFY_TOPIC`, `NTFY_TOKEN` | | Your ntfy topic, and the token the notifier posts with. `make notify-setup` creates both |
 | `NTFY_BASE_URL`, `NTFY_PORT` | , `8090` | Your ntfy server's address as your phone reaches it, and its port |
