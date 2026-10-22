@@ -120,14 +120,27 @@ export const THREATS: Record<string, ThreatInfo> = {
     severity: "medium",
     headline: (src, dst) => `${src} keeps checking in with ${dst}`,
     what:
-      "One of your devices has been contacting the same internet server every minute or two for the past hour, without a break. Infected devices do this to check in with the attacker's server for instructions. Some legitimate software, like update checkers, sync tools and monitoring agents, polls the same way.",
+      "One of your devices has been contacting the same internet server every minute or two for the past hour, without a break and at regular intervals. Infected devices do this to check in with the attacker's server for instructions. Some legitimate software, like update checkers, sync tools and apps that keep a connection to their server, polls the same way.",
     nextSteps: [
       "Look up who the server belongs to: search the address, or run whois on it. A cloud provider or software vendor you use is reassuring; an unknown host isn't.",
       "Find which program is making the connections. On a Mac, run lsof -i with the server address; on Windows, Resource Monitor's Network tab lists them.",
       "If you can't identify it, run a malware scan on the device.",
-      "If it's software you trust, this alert repeats hourly. Everyday apps check in like this, which is why the rule is off by default: set enabled = false under [beaconing] in config/detection.toml to turn it off again.",
+      "If it's software you trust, this alert repeats once a day for this device. Everyday apps check in like this, which is why the rule is off by default: set enabled = false under [beaconing] in config/detection.toml to turn it off again.",
     ],
-    features: ["checkins_last_hour", "checkin_slots_last_hour"],
+    features: ["checkins_last_hour", "checkin_slots_last_hour", "checkin_regularity"],
+  },
+  KNOWN_BOTNET_SERVER: {
+    name: "Known botnet server",
+    severity: "high",
+    headline: (src, dst) => `${src} connected to a known botnet server, ${dst}`,
+    what:
+      "One of your devices connected to an address and port that security researchers have reported as a botnet's control server, on abuse.ch's ThreatFox list. Infected devices connect to these servers to get instructions. It's the strongest sign of infection SentinelAI can see, though a listed address is occasionally reused by an innocent server once the botnet has moved on.",
+    nextSteps: [
+      "Find which program made the connection. On a Mac, run lsof -i with the server address; on Windows, Resource Monitor's Network tab lists them.",
+      "Disconnect the device from the network and run a malware scan. If it's a work device, tell your IT team.",
+      "Look the address up on threatfox.abuse.ch to see which malware it belongs to and when it was reported.",
+    ],
+    features: [],
   },
   RESOURCE_PRESSURE: {
     name: "Memory limit reached",
@@ -177,6 +190,7 @@ export const FEATURE_LABELS: Record<string, { label: string; format: (v: number)
   initiator_new_conns_60s: { label: "Connections opened in 60 s", format: (v) => v.toLocaleString() },
   checkins_last_hour: { label: "Check-ins in the last hour", format: (v) => v.toLocaleString() },
   checkin_slots_last_hour: { label: "Five-minute slots with a check-in", format: (v) => `${v} of 12` },
+  checkin_regularity: { label: "Check-ins at the usual interval", format: (v) => `${Math.round(v * 100)}%` },
   evicted_last_minute: { label: "Entries forgotten in the last minute", format: (v) => v.toLocaleString() },
   tables_dropping: { label: "Memory tables at their limit", format: (v) => v.toFixed(0) },
   busiest_peers_60s: { label: "Addresses this device dealt with in 60 s", format: (v) => v.toLocaleString() },

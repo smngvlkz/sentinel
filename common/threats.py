@@ -28,6 +28,7 @@ THREATS: dict[str, Threat] = {
     "DISTRIBUTED_FLOOD": Threat("high", "Distributed flood", "Many internet hosts converged on {dst}"),
     "NETWORK_SWEEP": Threat("medium", "Network sweep", "{src} probed many devices on your network"),
     "BEACONING": Threat("medium", "Regular check-ins", "{src} keeps checking in with {dst}"),
+    "KNOWN_BOTNET_SERVER": Threat("high", "Known botnet server", "{src} connected to a known botnet server, {dst}"),
     "RESOURCE_PRESSURE": Threat(
         "high", "Memory limit reached", "SentinelAI ran out of room tracking traffic around {dst}"
     ),

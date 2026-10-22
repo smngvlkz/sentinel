@@ -15,7 +15,8 @@ from collections import defaultdict
 from detection_engine.config import DEFAULTS
 
 from .beacons import BeaconTracker
-from .connections import ConnectionTable, HostActivity, connection_features
+from .connections import ConnectionTable, HostActivity, connection_features, is_local
+from .known_servers import KnownServers
 from .seen_twice import SeenTwiceTable
 
 # Connection requests followed per flow while their handshake completes.
@@ -56,6 +57,7 @@ class FlowTracker:
         flow_timeout: float = 30.0,
         limits: dict[str, int] | None = None,
         handshake_seconds: float = DEFAULTS["syn_flood"]["handshake_seconds"],
+        known_servers: KnownServers | None = None,
     ) -> None:
         limits = {**DEFAULTS["limits"], **(limits or {})}
         self.handshake_seconds = handshake_seconds
@@ -71,6 +73,7 @@ class FlowTracker:
             limits["max_hosts"], limits["max_services"], limits["max_sweeps"], limits["max_window_events"]
         )
         self.beacons = BeaconTracker(limits["max_beacon_series"])
+        self.known_servers = known_servers
 
     def _flow_key(self, packet: dict[str, str]) -> tuple[str, str]:
         return (packet["src_ip"], packet["dst_ip"])
@@ -122,6 +125,7 @@ class FlowTracker:
         duration = max(now - flow["start_time"], 0.001)
 
         conn, is_new, outbound = self.connections.update(packet)
+        known = self._known_server(conn) if is_new else None
         if is_new:
             self.hosts.record(conn)
             self.beacons.record(conn)
@@ -149,7 +153,22 @@ class FlowTracker:
             **connection_features(conn, outbound, now),
             **self.hosts.features(conn, now),
             **self.beacons.features(conn, now),
+            "known_server": 1.0 if known else 0.0,
+            # Which end is the listed server, for orienting the alert.
+            "known_server_is_initiator": 1.0 if known == "initiator" else 0.0,
         }
+
+    def _known_server(self, conn) -> str | None:
+        """'responder' or 'initiator': which end of a new connection is a listed
+        botnet server talking to a device on this network, if either is."""
+        if self.known_servers is None or not self.known_servers.servers:
+            return None
+        ends = {"initiator": conn.initiator, "responder": conn.responder}
+        for side, other in (("responder", "initiator"), ("initiator", "responder")):
+            ip, port = ends[side]
+            if not is_local(ip) and is_local(ends[other][0]) and self.known_servers.match(ip, port):
+                return side
+        return None
 
     def _syn_sent(self, flow: dict, src_port: str, now: float) -> None:
         pending = flow["pending_syns"]

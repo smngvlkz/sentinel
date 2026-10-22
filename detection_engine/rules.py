@@ -26,6 +26,7 @@ class RuleEngine:
             ("DISTRIBUTED_FLOOD", self._distributed_flood),
             ("NETWORK_SWEEP", self._network_sweep),
             ("BEACONING", self._beaconing),
+            ("KNOWN_BOTNET_SERVER", self._known_botnet_server),
         ]
 
     def evaluate(self, features: dict[str, float]) -> list[str]:
@@ -97,4 +98,8 @@ class RuleEngine:
         return (
             f.get("checkins_last_hour", 0) >= c["min_checkins_per_hour"]
             and f.get("checkin_slots_last_hour", 0) >= c["min_active_slots"]
+            and f.get("checkin_regularity", 0) >= c["min_regularity"]
         )
+
+    def _known_botnet_server(self, f: dict[str, float]) -> bool:
+        return bool(self.config["known_servers"].get("enabled", False)) and f.get("known_server", 0) >= 1

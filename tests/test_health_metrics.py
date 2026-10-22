@@ -126,6 +126,14 @@ class TestHealth:
         assert services["analyzer"]["tables"] == tables
         assert services["capture"]["names_dropped_total"] == 1
 
+    def test_known_server_list_status(self):
+        r = FakeRedis([])
+        status = {"entries": 3390, "updated_at": 1000.0, "error": None}
+        send_heartbeat(r, started_at=0.0, processed=0, model_loaded=False, known_servers=status)
+        assert self.health(r)["services"]["analyzer"]["known_servers"] == status
+        send_heartbeat(r, started_at=0.0, processed=0, model_loaded=False)
+        assert self.health(r)["services"]["analyzer"]["known_servers"] is None  # rule off
+
     def test_analyzer_down(self):
         services = self.health(FakeRedis())["services"]
         assert services["analyzer"] == {"running": False}

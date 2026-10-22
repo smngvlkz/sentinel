@@ -307,6 +307,9 @@ def _check_redis_and_pipeline() -> dict[str, Any]:
             **_stream_backlog(r),
             "packets_lost_unread": b.get("lost_unread"),
             "tables": b.get("tables", {}),
+            # The known botnet server list: size, when it was last downloaded, and any error.
+            # None when the rule is off.
+            "known_servers": b.get("known_servers"),
         }
     else:
         analyzer = {"running": False}

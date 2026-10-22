@@ -8,7 +8,8 @@ the risks or open questions. The order matters and is explained as it goes.
 
 ## Where things stand
 
-- Detection: eight rules (the botnet check-in rule off by default) plus an
+- Detection: nine rules, including a list of known botnet servers (the
+  botnet check-in rule off by default), plus an
   optional anomaly model. Evaluated on three days of CIC-IDS2017, two of
   them held out, and for 24 hours on a real laptop. See
   [evaluation.md](evaluation.md).
@@ -258,10 +259,20 @@ rules are medium severity, so they'd never reach a phone by default.
   reconnecting to dozens of web services all day, as well as the polling
   server from Friday and Wednesday. Ignoring devices with many check-in
   series won't work, because Friday's infected machines were ordinary
-  workstations that kept browsing. A rework needs a botnet dataset it
-  wasn't built on, such as CTU-13. Until then it ships off by default: in
-  24 hours on a real laptop it raised 53 alerts, 50 of them from the
-  Cursor editor and the Claude apps.
+  workstations that kept browsing. In 24 hours on a real laptop it raised
+  53 alerts, 50 of them from the Cursor editor and the Claude apps.
+  **Done, partly:** it now needs regular timing and alerts once a day per
+  device. Tested on botnet and normal captures it wasn't built on, plus 48
+  hours on a Mac, false alarms fell to one in 48 hours, but it flagged bots
+  that don't check in on a timer much later, so it stays off by default. A
+  list of known botnet servers now covers part of that gap, on by default.
+  See [evaluation.md](evaluation.md).
+- **Later, a separate rule: a device sending mail to many mail servers.**
+  Some bots send spam rather than checking in on a timer, so the check-in
+  rule is slow to see them or misses them. A home device connecting to
+  lots of different mail servers on port 25 is a classic sign of infection,
+  because home devices almost never send mail that way. It needs its own
+  design and its own test on data it wasn't built on.
 
 On the dashboard, the share of normal machines with at least one false
 alarm is 5 of 7, 7 of 12 and 9 of 13 with the check-in rule, and 4 of 7,

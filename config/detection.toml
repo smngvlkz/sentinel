@@ -67,9 +67,9 @@ min_local_hosts_60s = 20
 
 [beaconing]
 # A device on your network that keeps opening TCP connections to the same
-# internet server and port throughout the last hour, the way malware checks
-# in with its controller. On CIC-IDS2017 this caught all five infected
-# machines within about 45 minutes.
+# internet server and port throughout the last hour, at regular intervals,
+# the way malware checks in with its controller. On CIC-IDS2017 this caught
+# all five infected machines within about 45 minutes.
 #
 # Off by default, because ordinary software does the same: on CIC-IDS2017's
 # held-out Monday it flagged two workstations reconnecting to dozens of web
@@ -81,8 +81,34 @@ enabled = false
 min_checkins_per_hour = 30
 # Of the hour's twelve 5-minute slots, how many had a check-in.
 min_active_slots = 11
+# Share of the gaps between check-ins that are within 10% (or 2 seconds) of
+# the usual gap, 0-1. Bots sleep a fixed time between check-ins; apps
+# reconnect whenever you do something. On the data this was designed on, 16
+# of 17 bots scored 0.5 or more, and apps reconnecting to busy web services
+# at most 0.3.
+# Update checkers are as regular as bots, and a bot that randomises its
+# timing isn't, so this narrows alerts down rather than proving anything.
+# 0 turns it off.
+min_regularity = 0.4
 # It's an ongoing condition, so repeat the alert at most this often per
-# device and server rather than every minute.
+# device (whichever servers it checks in with), rather than every minute.
+repeat_alert_seconds = 86400
+
+[known_servers]
+# A device on your network connecting to a known botnet control server: an
+# address and port on abuse.ch's ThreatFox list of confirmed botnet servers.
+# Catches what the check-in rule can't, such as a bot that randomises its
+# timing, but only for servers someone has already reported.
+#
+# SentinelAI downloads the list from threatfox.abuse.ch every refresh_hours.
+# Nothing about your network is sent; abuse.ch only sees the download. In
+# 48 hours on a real Mac and on 18 captures of normal users' traffic it
+# matched nothing. Set enabled = false to stop the downloads.
+enabled = true
+refresh_hours = 6
+# ThreatFox's confidence that an entry is a botnet server, 0-100.
+min_confidence = 75
+# One alert per device and server per hour while it keeps connecting.
 repeat_alert_seconds = 3600
 
 [rate_evidence]

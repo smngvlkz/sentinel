@@ -10,10 +10,10 @@ Website: [sentinelids.com](https://sentinelids.com).
 
 ![SentinelAI dashboard](docs/SentinelAI.png)
 
-- **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, plus an optional rule for botnet check-ins.
+- **Rule-based detection** for port scans, network sweeps, connection and request floods, distributed floods, traffic bursts and oversized packets, connections to known botnet servers, plus an optional rule for botnet check-ins.
 - **Optional machine-learning model** (Isolation Forest) that learns your network's normal traffic and flags what doesn't fit.
 - **A dashboard that explains itself.** Every alert says what happened, whether the source is on your network or the internet, and what to do next.
-- **Runs locally.** Your traffic never leaves your machine, and every service listens only on `127.0.0.1` unless you open the dashboard to your other devices, which needs a password.
+- **Runs locally.** Your traffic never leaves your machine (the only thing it downloads is a public list of known botnet servers), and every service listens only on `127.0.0.1` unless you open the dashboard to your other devices, which needs a password.
 
 > [!IMPORTANT]
 > **Only monitor networks you own or have explicit permission to monitor.**
@@ -152,7 +152,8 @@ FastAPI ──── Next.js dashboard
 | Request flood (`REQUEST_FLOOD`) | One source opening completed connections to one service very fast, e.g. an HTTP flood | > 400 in 10 s |
 | Distributed flood (`DISTRIBUTED_FLOOD`) | Many internet hosts connecting to one of your devices at once | > 50 sources in 60 s |
 | Network sweep (`NETWORK_SWEEP`) | One source contacting many devices on your network on the same port | > 20 devices in 60 s |
-| Regular check-ins (`BEACONING`) | A device opening connections to the same internet server throughout the last hour, like malware checking in | **Off by default.** When on: ≥ 30 check-ins in 11 of 12 five-minute slots |
+| Known botnet server (`KNOWN_BOTNET_SERVER`) | A device connecting to an address and port on abuse.ch's ThreatFox list of botnet control servers | List refreshed every 6 hours; one alert per device and server per hour |
+| Regular check-ins (`BEACONING`) | A device opening connections to the same internet server throughout the last hour, at regular intervals, like malware checking in | **Off by default.** When on: ≥ 30 check-ins in 11 of 12 five-minute slots, ≥ 40% of them at the usual interval; one alert per device per day |
 | Unusual traffic (`ANOMALY`) | The ML model scores a flow as an outlier | Only with a trained model |
 | Memory limit reached (`RESOURCE_PRESSURE`) | One of SentinelAI's own memory tables fills up and has to forget entries, which takes a flood from tens of thousands of addresses. Detection may be degraded while it lasts | Limits under `[limits]`; at most one alert every 10 minutes |
 
@@ -162,12 +163,19 @@ Replies from servers you connect to and FTP data connections never count as
 a port scan, and large downloads never count as a traffic burst or an
 oversized packet. UDP port scans aren't detected yet.
 
-The check-in rule is off by default because everyday software checks in the
-same way: on a real laptop over 24 hours it flagged the Cursor editor and the
-Claude apps 50 times, and on a CIC-IDS2017 day with no attacks it flagged two
-workstations all day. It did catch every infected machine in that dataset, so
-turn it on (`enabled = true` under `[beaconing]` in `config/detection.toml`,
-then `make restart`) if you'd rather have noisy alerts than miss a bot.
+The botnet-server list is downloaded from threatfox.abuse.ch every 6 hours
+and kept in Redis, so a restart doesn't need the internet; `/health` shows
+its size, age and any download error. Nothing about your network is sent.
+It only catches servers someone has already reported. Set `enabled = false`
+under `[known_servers]` to stop the downloads.
+
+The check-in rule is off by default. Its timing test cut false alarms to one
+in 48 hours on a real Mac (the Cursor editor) and none on 18 captures of
+normal users, but on unseen malware it flagged bots that weren't checking in
+on a timer, such as spam bots, hours later than the old rule, or not at all.
+Turn it on (`enabled = true` under `[beaconing]` in `config/detection.toml`,
+then `make restart`) if you'd rather have an occasional alert from an app
+than miss a bot. Details in [docs/evaluation.md](docs/evaluation.md).
 
 ### Tuning
 
@@ -260,9 +268,10 @@ server that polls a service all day (7 and 8 alerts). On Monday it also
 flagged two workstations that kept reconnecting to dozens of web services
 for hours, most likely web pages refreshing ads and analytics. With the
 polling server, that was 34 of Monday's 49 alerts. Friday is the only botnet
-day in the dataset, so there's no held-out test of how well it catches bots.
-For these reasons the rule is off by default; the numbers above were
-measured with it on.
+day in the dataset. The numbers above were measured with the rule on,
+before it was reworked; the current version raises 3 alerts on Monday
+instead of 34, still on the same three machines, and was tested on other
+botnet data (see [docs/evaluation.md](docs/evaluation.md)). It's off by default.
 
 The optional anomaly model adds little detection (two extra flood minutes
 on Wednesday), and flagged 0.57% of normal minutes on Friday, 0.01% on
