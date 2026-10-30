@@ -62,6 +62,8 @@ TIMEOUT_MS = 100
 # The kernel's buffer for packets waiting to be read. A bigger one rides out
 # bursts that would otherwise be dropped.
 BUFFER_BYTES = 16 * 1024 * 1024
+# With no packets this long after starting, the interface is probably wrong.
+QUIET_WARNING_SECONDS = 30.0
 # Ports scapy decodes as DNS (and LLMNR, which it decodes as DNS too).
 DNS_PORTS = {"53", "5353", "5355"}
 
@@ -190,11 +192,13 @@ def main() -> None:
     drops = DropCounter()
     pipe = r.pipeline(transaction=False)
     waiting = 0
-    last_flush = last_stats = time.monotonic()
+    last_flush = last_stats = started = time.monotonic()
+    seen_packet = warned_quiet = False
 
     while True:
         header, data = reader.next()
         if header is not None:
+            seen_packet = True
             sec, usec = header.getts()
             entry = parse_frame(data, sec + usec / 1e6, header.getlen())
             if entry is not None:
@@ -219,6 +223,11 @@ def main() -> None:
                 pipe = r.pipeline(transaction=False)
             waiting = 0
             last_flush = now
+        if not seen_packet and not warned_quiet and now - started >= QUIET_WARNING_SECONDS:
+            log.warning("no packets on %s in %d seconds: is it the interface your traffic uses? "
+                        "Set CAPTURE_INTERFACE to one of: %s", CAPTURE_INTERFACE, QUIET_WARNING_SECONDS,
+                        ", ".join(pcapy.findalldevs()))
+            warned_quiet = True
         if now - last_stats >= STATS_INTERVAL:
             write_stats(r, names, drops.update(reader.stats()[1]))
             last_stats = now

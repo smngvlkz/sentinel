@@ -17,6 +17,10 @@ uses [Semantic Versioning](https://semver.org/).
   CIC-IDS2017 days), but those held only 2 spam bots, too few to confirm how
   many it catches, so it stays off. Turn it on with `enabled = true` under
   `[mass_mail]` in `config/detection.toml`. Results in `docs/evaluation.md`.
+- Capture warns when it has seen no packets 30 seconds after starting, and
+  lists the interfaces it could use instead: a wrong `CAPTURE_INTERFACE`
+  (`en0` is the default, but many Macs use `en1` for Wi-Fi) otherwise looks
+  like a quiet network.
 
 ### Changed
 
