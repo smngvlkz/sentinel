@@ -114,7 +114,7 @@ Run `make` on its own to print this list.
 ```
 Network interface
        │
-Packet capture (Scapy, on the host)
+Packet capture (libpcap, on the host)
        │
 Redis stream
        │
@@ -519,7 +519,7 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 |----------|---------|
 | `GET /auth/status` | Whether a password is set and this browser is logged in. Once a password is set, this, `POST /auth/login` and `POST /auth/setup` are the only endpoints that work without logging in |
 | `POST /auth/login`, `/auth/logout`, `/auth/setup`, `/auth/password` | Log in or out, set the first password (from this machine only), change it (`{"current": ..., "new": ...}`) |
-| `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), and hostnames capture rejected (`names_dropped_total`, when names are on) |
+| `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), packets the kernel dropped before capture could read them (`kernel_dropped_total`, since capture started), and hostnames capture rejected (`names_dropped_total`, when names are on) |
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
 | `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
 | `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |

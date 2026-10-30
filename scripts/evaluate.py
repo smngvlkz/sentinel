@@ -41,6 +41,7 @@ from scapy.all import IP, TCP, UDP, Raw  # noqa: E402
 
 from analysis_service.feature_extractor import FlowTracker  # noqa: E402
 from capture_service.capture import parse_packet  # noqa: E402
+from capture_service.frames import parse_frame  # noqa: E402
 from detection_engine.anomaly_model import FEATURE_KEYS  # noqa: E402
 from detection_engine.config import has_rate_evidence, load_config  # noqa: E402
 from detection_engine.rules import RuleEngine  # noqa: E402
@@ -194,47 +195,6 @@ def label_at(labels: Labels, key: Key, now: float) -> str | None:
 
 # ── Reading captures ────────────────────────────────────────────────────
 
-# TCP flag letters in bit order, matching how scapy renders flags ("S", "SA", "PA").
-_TCP_FLAGS = "FSRPAUECN"
-
-
-def _flag_str(bits: int) -> str:
-    return "".join(ch for i, ch in enumerate(_TCP_FLAGS) if bits & (1 << i))
-
-
-def _parse_ethernet(data: bytes, timestamp: float, orig_len: int) -> dict[str, str] | None:
-    """Pull the fields parse_packet() produces out of a raw Ethernet frame."""
-    if len(data) < 14:
-        return None
-    ethertype = struct.unpack("!H", data[12:14])[0]
-    off = 14
-    while ethertype in (0x8100, 0x88A8) and len(data) >= off + 4:  # VLAN tags
-        ethertype = struct.unpack("!H", data[off + 2:off + 4])[0]
-        off += 4
-    if ethertype != 0x0800 or len(data) < off + 20:
-        return None
-    ihl = (data[off] & 0x0F) * 4
-    proto = data[off + 9]
-    entry = {
-        "timestamp": str(timestamp),
-        "src_ip": ".".join(map(str, data[off + 12:off + 16])),
-        "dst_ip": ".".join(map(str, data[off + 16:off + 20])),
-        "protocol": str(proto),
-        "packet_size": str(orig_len),
-    }
-    l4 = off + ihl
-    if proto == 6 and len(data) >= l4 + 14:
-        sport, dport = struct.unpack("!HH", data[l4:l4 + 4])
-        bits = ((data[l4 + 12] & 0x01) << 8) | data[l4 + 13]
-        entry.update(src_port=str(sport), dst_port=str(dport), flags=_flag_str(bits), transport="TCP")
-    elif proto == 17 and len(data) >= l4 + 4:
-        sport, dport = struct.unpack("!HH", data[l4:l4 + 4])
-        entry.update(src_port=str(sport), dst_port=str(dport), flags="", transport="UDP")
-    else:
-        entry.update(src_port="0", dst_port="0", flags="", transport="OTHER")
-    return entry
-
-
 def _read_classic(f, header: bytes, path: str) -> Iterator[dict[str, str]]:
     formats = {
         b"\xd4\xc3\xb2\xa1": ("<", 1e-6), b"\xa1\xb2\xc3\xd4": (">", 1e-6),
@@ -254,7 +214,7 @@ def _read_classic(f, header: bytes, path: str) -> Iterator[dict[str, str]]:
         data = f.read(incl_len)
         if len(data) < incl_len:  # truncated, e.g. a capture still downloading
             return
-        entry = _parse_ethernet(data, ts_sec + ts_frac * frac, orig_len)
+        entry = parse_frame(data, ts_sec + ts_frac * frac, orig_len)
         if entry:
             yield entry
 
@@ -300,7 +260,7 @@ def _read_pcapng(f, path: str) -> Iterator[dict[str, str]]:
             linktype, resolution = interfaces[iface] if iface < len(interfaces) else (1, 1e-6)
             if linktype != 1:
                 continue
-            entry = _parse_ethernet(body[20:20 + cap_len], ((ts_hi << 32) | ts_lo) * resolution, orig_len)
+            entry = parse_frame(body[20:20 + cap_len], ((ts_hi << 32) | ts_lo) * resolution, orig_len)
             if entry:
                 yield entry
 

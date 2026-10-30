@@ -295,7 +295,10 @@ def _check_redis_and_pipeline() -> dict[str, Any]:
 
     stats = r.get(CAPTURE_STATS_KEY)
     if stats:
-        capture["names_dropped_total"] = json.loads(stats).get("names_dropped_total")
+        s = json.loads(stats)
+        # Packets the kernel dropped before capture could read them, since capture started.
+        capture["kernel_dropped_total"] = s.get("kernel_dropped_total")
+        capture["names_dropped_total"] = s.get("names_dropped_total")
 
     beat = r.get(HEARTBEAT_KEY)
     if beat:
