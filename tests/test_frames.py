@@ -93,3 +93,41 @@ class TestMayCarryName:
         assert not self.check(E / IP() / TCP(dport=443, flags="A"))
         assert not self.check(E / IP() / TCP(dport=443) / Raw(b"\x17\x03\x03" + b"x" * 100))
         assert not self.check(E / IP() / UDP(sport=443, dport=50000) / Raw(b"quic"))
+
+
+class QuietReader:
+    """A capture handle on an interface with no traffic; stops the loop after a few reads."""
+
+    def __init__(self, reads):
+        self.reads = reads
+
+    def __getattr__(self, name):
+        return lambda *a: None
+
+    def datalink(self):
+        return 1
+
+    def stats(self):
+        return 0, 0, 0
+
+    def next(self):
+        self.reads -= 1
+        if self.reads < 0:
+            raise KeyboardInterrupt
+        return None, b""
+
+
+def test_warns_once_when_the_interface_is_quiet(caplog):
+    from unittest.mock import MagicMock, patch
+
+    from capture_service import capture
+
+    clock = iter(range(0, 1000, 10))  # each read takes 10 seconds
+    with patch.object(capture, "connect_redis", return_value=MagicMock()), \
+         patch.object(capture.pcapy, "create", return_value=QuietReader(reads=8)), \
+         patch.object(capture.pcapy, "findalldevs", return_value=["en0", "en1"]), \
+         patch.object(capture.time, "monotonic", side_effect=lambda: next(clock)), \
+         pytest.raises(KeyboardInterrupt):
+        capture.main()
+    warnings = [r.message for r in caplog.records if "no packets" in r.message]
+    assert len(warnings) == 1 and "en0, en1" in warnings[0]
