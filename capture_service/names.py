@@ -160,6 +160,10 @@ class HelloReassembler:
     def __len__(self) -> int:
         return len(self._pending)
 
+    def holds(self, key: tuple) -> bool:
+        """Whether part of a ClientHello on this connection is waiting for the rest."""
+        return key in self._pending
+
     def feed(self, key: tuple, seq: int, payload: bytes, now: float) -> str | None:
         """Process one TCP payload; returns the SNI once it can be read."""
         held = self._pending.pop(key, None)

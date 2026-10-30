@@ -18,6 +18,24 @@ uses [Semantic Versioning](https://semver.org/).
   many it catches, so it stays off. Turn it on with `enabled = true` under
   `[mass_mail]` in `config/detection.toml`. Results in `docs/evaluation.md`.
 
+### Changed
+
+- Packet capture is about 13 times faster: it reads packets with libpcap
+  (through `pcapy-ng`) and only the header fields it needs, instead of
+  decoding every packet with Scapy, and writes them to Redis in batches.
+  Measured on an M4 on 200,000 CIC-IDS2017 packets, including the writes:
+  about 65,000 packets a second, up from about 5,000 (about 33,000 with
+  names on, which still decode DNS, HTTP and TLS handshake packets with
+  Scapy). Run `make setup` again to install it.
+- `/health` reports packets the kernel dropped before capture could read
+  them (`kernel_dropped_total`).
+
+### Fixed
+
+- IP fragments after the first are no longer read as having ports. Only
+  the first fragment carries the TCP or UDP header, so the offline replays
+  (`scripts/evaluate.py`) read the start of the payload as ports instead.
+
 ## [0.6.4] - 2026-10-22
 
 ### Added

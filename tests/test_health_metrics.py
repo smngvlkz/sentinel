@@ -118,13 +118,20 @@ class TestHealth:
         send_heartbeat(r, started_at=0.0, processed=900, model_loaded=True, tables=tables, lost_unread=7)
         names = NameExtractor()
         names.drops.record("bad name", "1.2.3.4")
-        write_stats(r, names)
+        write_stats(r, names, kernel_dropped=5)
 
         services = self.health(r)["services"]
         assert services["analyzer"]["lag"] == 42 and services["analyzer"]["pending"] == 3
         assert services["analyzer"]["packets_lost_unread"] == 7
         assert services["analyzer"]["tables"] == tables
         assert services["capture"]["names_dropped_total"] == 1
+        assert services["capture"]["kernel_dropped_total"] == 5
+
+    def test_kernel_drops_reported_with_names_off(self):
+        r = FakeRedis([])
+        write_stats(r, None, kernel_dropped=0)
+        capture = self.health(r)["services"]["capture"]
+        assert capture["kernel_dropped_total"] == 0 and capture["names_dropped_total"] is None
 
     def test_known_server_list_status(self):
         r = FakeRedis([])
@@ -137,7 +144,7 @@ class TestHealth:
     def test_analyzer_down(self):
         services = self.health(FakeRedis())["services"]
         assert services["analyzer"] == {"running": False}
-        assert "names_dropped_total" not in services["capture"]    # names off: capture writes no stats
+        assert "kernel_dropped_total" not in services["capture"]    # capture hasn't written stats
 
     def test_redis_down(self):
         r = MagicMock()
@@ -154,7 +161,7 @@ def test_capture_counts_dropped_names_in_total():
     names.drops.maybe_log(61.0)                                    # logs and resets the per-minute count
     assert names.drops.count == 0 and names.drops.total == 3
     r = FakeRedis()
-    write_stats(r, names)
+    write_stats(r, names, kernel_dropped=0)
     assert json.loads(r.store[STATS_KEY])["names_dropped_total"] == 3
 
 
