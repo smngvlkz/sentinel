@@ -115,6 +115,20 @@ export const THREATS: Record<string, ThreatInfo> = {
     features: ["initiator_same_port_local_hosts_60s", "initiator_new_conns_60s"],
     crowd: { side: "destination", feature: "initiator_same_port_local_hosts_60s", noun: "devices" },
   },
+  MASS_MAIL: {
+    name: "Mass mailing",
+    severity: "high",
+    headline: (src) => `${src} sent mail straight to many different mail servers`,
+    what:
+      "One of your devices connected to many different mail servers on the internet within a few minutes, on port 25, the port mail servers use to deliver to each other. Phones and computers send mail through their provider instead, so this is how an infected device sending spam looks. Spam bots get home networks blocklisted, which can stop your own email from being delivered.",
+    nextSteps: [
+      "Find which program is making the connections. On a Mac, run lsof -i :25; on Windows, Resource Monitor's Network tab lists them.",
+      "Disconnect the device from the network and run a malware scan. If it's a work device, tell your IT team.",
+      "If this device really is a mail server, raise mass_mail.min_mail_servers_10m in config/detection.toml.",
+    ],
+    features: ["initiator_mail_servers_10m", "initiator_new_conns_60s"],
+    crowd: { side: "destination", feature: "initiator_mail_servers_10m", noun: "mail servers" },
+  },
   BEACONING: {
     name: "Regular check-ins",
     severity: "medium",
@@ -188,6 +202,7 @@ export const FEATURE_LABELS: Record<string, { label: string; format: (v: number)
   responder_new_conns_10s: { label: "New connections to this device in 10 s", format: (v) => v.toLocaleString() },
   initiator_same_port_local_hosts_60s: { label: "Devices contacted on this port in 60 s", format: (v) => v.toLocaleString() },
   initiator_new_conns_60s: { label: "Connections opened in 60 s", format: (v) => v.toLocaleString() },
+  initiator_mail_servers_10m: { label: "Mail servers contacted in 10 min", format: (v) => v.toLocaleString() },
   checkins_last_hour: { label: "Check-ins in the last hour", format: (v) => v.toLocaleString() },
   checkin_slots_last_hour: { label: "Five-minute slots with a check-in", format: (v) => `${v} of 12` },
   checkin_regularity: { label: "Check-ins at the usual interval", format: (v) => `${Math.round(v * 100)}%` },

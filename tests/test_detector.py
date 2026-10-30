@@ -126,6 +126,13 @@ class TestDetectionEngine:
         groups = {t["type"]: t.get("group") for t in engine.detect(normal_features, packet)}
         assert groups == {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "PORT_SCAN": None}
 
+    def test_mass_mail_repeats_hourly_per_device_and_names_it(self, packet, normal_features):
+        engine = self._build_engine(rule_results=["MASS_MAIL"])
+        reply = {**packet, "src_ip": "198.51.100.25", "src_port": "25", "dst_ip": "192.168.1.20", "dst_port": "40001"}
+        threat = engine.detect({**normal_features, "from_initiator": 0.0}, reply)[0]
+        assert threat["cooldown"] == 3600.0 and threat["group"] == "source"
+        assert threat["source_ip"] == "192.168.1.20"
+
     def test_beaconing_repeats_daily_per_device_and_names_it(self, packet, normal_features):
         engine = self._build_engine(rule_results=["BEACONING"])
         reply = {**packet, "src_ip": "198.51.100.200", "src_port": "8080", "dst_ip": "192.168.1.20", "dst_port": "40001"}

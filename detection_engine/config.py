@@ -26,6 +26,8 @@ DEFAULTS: dict[str, dict[str, float]] = {
     "request_flood": {"min_new_connections_10s": 400},
     "distributed_flood": {"min_external_sources_60s": 50},
     "network_sweep": {"min_local_hosts_60s": 20},
+    # Off by default: the held-out test had too few spam bots to confirm it (see docs/evaluation.md).
+    "mass_mail": {"enabled": False, "min_mail_servers_10m": 10, "repeat_alert_seconds": 3600},
     # Off by default: scheduled software and busy web pages check in the same way (see docs/evaluation.md).
     "beaconing": {
         "enabled": False, "min_checkins_per_hour": 30, "min_active_slots": 11, "min_regularity": 0.4,

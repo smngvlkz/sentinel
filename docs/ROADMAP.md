@@ -267,12 +267,16 @@ rules are medium severity, so they'd never reach a phone by default.
   that don't check in on a timer much later, so it stays off by default. A
   list of known botnet servers now covers part of that gap, for anyone who adds a free abuse.ch key.
   See [evaluation.md](evaluation.md).
-- **Later, a separate rule: a device sending mail to many mail servers.**
+- **A separate rule: a device sending mail to many mail servers.**
   Some bots send spam rather than checking in on a timer, so the check-in
   rule is slow to see them or misses them. A home device connecting to
   lots of different mail servers on port 25 is a classic sign of infection,
-  because home devices almost never send mail that way. It needs its own
-  design and its own test on data it wasn't built on.
+  because home devices almost never send mail that way.
+  **Done, off by default:** the mass-mail rule caught 17 of 19 spam bots on
+  the data it was designed on, with no false alarms, and raised none on
+  data it hadn't seen. But that data held only 2 spam bots, too few to
+  confirm the catch rate, so it ships switched off. See
+  [evaluation.md](evaluation.md).
 
 On the dashboard, the share of normal machines with at least one false
 alarm is 5 of 7, 7 of 12 and 9 of 13 with the check-in rule, and 4 of 7,

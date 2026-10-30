@@ -1,5 +1,6 @@
-"""Rules built on connections and per-host windows: request floods, distributed floods, sweeps."""
+"""Rules built on connections and per-host windows: request floods, distributed floods, sweeps, mass mail."""
 
+import copy
 import sys
 import os
 
@@ -8,7 +9,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from analysis_service.feature_extractor import FlowTracker
-from detection_engine.config import DEFAULTS
+from detection_engine.config import DEFAULT_CONFIG_PATH, DEFAULTS, load_config
 from detection_engine.rules import RuleEngine
 
 
@@ -119,6 +120,97 @@ class TestNetworkSweep:
         for i in range(1, 30):
             f = tracker.update(pkt(0.0, "192.168.1.5", 50000 + i, f"192.168.1.{100 + i}", 445, "PA", size=500))
         assert "NETWORK_SWEEP" not in rules.evaluate(f)
+
+
+
+class TestMassMail:
+    """A local device delivering mail straight to many internet mail servers: a spam bot."""
+
+    @pytest.fixture
+    def rules(self):
+        config = copy.deepcopy(DEFAULTS)
+        config["mass_mail"]["enabled"] = True
+        return RuleEngine(config=config)
+
+    @staticmethod
+    def mail(tracker, servers, spacing, src="192.168.1.66", port=25, start=0.0, flags="S"):
+        f = None
+        for i in range(servers):
+            f = tracker.update(pkt(start + i * spacing, src, 40000 + i, f"198.51.100.{i + 1}", port, flags))
+        return f
+
+    def test_spam_bot_detected(self, rules):
+        """Spam bots in CTU-13 reached 35-45 different mail servers a minute."""
+        f = self.mail(FlowTracker(), 40, spacing=1.5)
+        assert f["initiator_mail_servers_10m"] == 40
+        assert "MASS_MAIL" in rules.evaluate(f)
+
+    def test_boundary(self, rules):
+        assert "MASS_MAIL" not in rules.evaluate(self.mail(FlowTracker(), 9, spacing=30))
+        assert "MASS_MAIL" in rules.evaluate(self.mail(FlowTracker(), 10, spacing=30))
+
+    def test_spread_over_more_than_ten_minutes_is_not(self, rules):
+        f = self.mail(FlowTracker(), 30, spacing=70)
+        assert f["initiator_mail_servers_10m"] <= 9
+        assert "MASS_MAIL" not in rules.evaluate(f)
+
+    def test_window_survives_cleanup_between_slow_sends(self, rules):
+        """A host quiet for more than a minute between sends keeps its 10-minute count."""
+        tracker = FlowTracker()
+        for i in range(10):
+            f = tracker.update(pkt(i * 65.0, "192.168.1.66", 40000 + i, f"198.51.100.{i + 1}", 25, "S"))
+            tracker.cleanup_stale(i * 65.0 + 64)
+        assert f["initiator_mail_servers_10m"] == 10
+        assert "MASS_MAIL" in rules.evaluate(f)
+
+    @pytest.mark.parametrize("port", [587, 465, 443])
+    def test_submission_and_web_ports_are_not(self, rules, port):
+        """Mail apps send through their provider on 587 or 465."""
+        assert "MASS_MAIL" not in rules.evaluate(self.mail(FlowTracker(), 40, spacing=1, port=port))
+
+    def test_one_provider_many_times_is_not(self, rules):
+        tracker = FlowTracker()
+        for i in range(50):
+            f = tracker.update(pkt(i * 2.0, "192.168.1.66", 40000 + i, "198.51.100.25", 25, "S"))
+        assert f["initiator_mail_servers_10m"] == 1
+        assert "MASS_MAIL" not in rules.evaluate(f)
+
+    def test_local_mail_servers_are_not(self, rules):
+        """A scan of the local network on port 25 is the sweep rule's job."""
+        tracker = FlowTracker()
+        for i in range(1, 30):
+            f = tracker.update(pkt(i * 0.5, "192.168.1.66", 40000 + i, f"192.168.1.{100 + i}", 25, "S"))
+        assert f["initiator_mail_servers_10m"] == 0
+
+    def test_mail_servers_delivering_to_you_are_not(self, rules):
+        """Incoming mail from the internet isn't this device sending it."""
+        tracker = FlowTracker()
+        for i in range(30):
+            f = tracker.update(pkt(i * 1.0, f"198.51.100.{i + 1}", 40000 + i, "192.168.1.25", 25, "S"))
+        assert "MASS_MAIL" not in rules.evaluate(f)
+
+    def test_joining_connections_mid_stream_is_not(self, rules):
+        f = self.mail(FlowTracker(), 30, spacing=0.0, flags="PA")
+        assert "MASS_MAIL" not in rules.evaluate(f)
+
+
+class TestMassMailOffByDefault:
+    """The held-out test had too few spam bots to confirm the rule, so it is opt-in."""
+
+    def test_default_config_and_shipped_file_leave_it_off(self):
+        assert DEFAULTS["mass_mail"]["enabled"] is False
+        assert load_config(DEFAULT_CONFIG_PATH)["mass_mail"]["enabled"] is False
+
+    def test_silent_by_default_even_for_a_spam_bot(self):
+        f = TestMassMail.mail(FlowTracker(), 40, spacing=1.5)
+        assert f["initiator_mail_servers_10m"] == 40  # still measured...
+        assert "MASS_MAIL" not in RuleEngine(config=DEFAULTS).evaluate(f)  # ...but not alerted on
+
+    def test_turning_it_on_in_the_config_file(self, tmp_path):
+        path = tmp_path / "detection.toml"
+        path.write_text("[mass_mail]\nenabled = true\n")
+        f = TestMassMail.mail(FlowTracker(), 40, spacing=1.5)
+        assert "MASS_MAIL" in RuleEngine(config=load_config(str(path))).evaluate(f)
 
 
 def _quiet():
