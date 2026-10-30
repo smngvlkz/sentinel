@@ -180,6 +180,16 @@ Turn it on (`enabled = true` under `[beaconing]` in `config/detection.toml`,
 then `make restart`) if you'd rather have an occasional alert from an app
 than miss a bot. Details in [docs/evaluation.md](docs/evaluation.md).
 
+The mass-mail rule is off by default too. It raises a high-severity alert
+when a device on your network delivers mail straight to 10 or more
+different internet mail servers on port 25 within 10 minutes, the way spam
+bots do; phones and computers send mail through one provider on port 587
+or 465. It caught 17 of 19 spam bots on the data it was designed on, with
+no false alarms, but the malware captures it was tested on afterwards held
+only 2 spam bots, too few to confirm that. Turn it on with `enabled = true`
+under `[mass_mail]` in `config/detection.toml`, then `make restart`. If you
+run your own mail server, raise `min_mail_servers_10m` or leave it off.
+
 ### Tuning
 
 Every threshold lives in [`config/detection.toml`](config/detection.toml).

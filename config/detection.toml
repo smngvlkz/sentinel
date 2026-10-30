@@ -65,6 +65,24 @@ min_external_sources_60s = 50
 # CIC-IDS2017 peaked at 7 (Windows name lookups).
 min_local_hosts_60s = 20
 
+[mass_mail]
+# A device on your network connecting to many different internet mail
+# servers on port 25, the way spam bots deliver their mail. Phones and
+# computers send mail through one provider on port 587 or 465, so on the
+# data this was designed on no normal machine reached more than one mail
+# server; spam bots reached 35 to 45 a minute.
+#
+# Off by default: it caught 17 of 19 spam bots on the data it was designed
+# on, but the held-out captures held too few spam bots to confirm that.
+# Turn it on if you want it; details in docs/evaluation.md.
+enabled = false
+# Different mail servers within 10 minutes. If you run your own mail
+# server on this network, raise it or exclude that server's traffic.
+min_mail_servers_10m = 10
+# It goes on while the device keeps sending: repeat the alert at most this
+# often per device.
+repeat_alert_seconds = 3600
+
 [beaconing]
 # A device on your network that keeps opening TCP connections to the same
 # internet server and port throughout the last hour, at regular intervals,

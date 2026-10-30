@@ -19,12 +19,12 @@ log = logging.getLogger(__name__)
 # Rules judged on a whole connection rather than a one-way flow. Their alerts
 # name the connection's initiator as the source, whichever direction the
 # triggering packet went.
-CONNECTION_RULES = {"REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "BEACONING", "KNOWN_BOTNET_SERVER"}
+CONNECTION_RULES = {"REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "MASS_MAIL", "BEACONING", "KNOWN_BOTNET_SERVER"}
 
 # How repeat alerts are grouped: one distributed-flood alert per victim, not
 # one per attacking host; one sweep alert per scanner, not one per target;
-# one check-in alert per device, not one per server it checks in with.
-ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "BEACONING": "source"}
+# one mass-mail or check-in alert per device, not one per server it contacts.
+ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "MASS_MAIL": "source", "BEACONING": "source"}
 
 
 class DetectionEngine:
@@ -57,6 +57,9 @@ class DetectionEngine:
                 threat.update(_oriented(packet, features))
             if rule_name in ALERT_GROUP:
                 threat["group"] = ALERT_GROUP[rule_name]
+            if rule_name == "MASS_MAIL":
+                # It goes on as long as the device keeps sending: repeat it hourly, not every minute.
+                threat["cooldown"] = float(self.config["mass_mail"]["repeat_alert_seconds"])
             if rule_name == "BEACONING":
                 # An ongoing condition: repeat it per device (daily by default), not every minute.
                 threat["cooldown"] = float(self.config["beaconing"]["repeat_alert_seconds"])

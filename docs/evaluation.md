@@ -425,6 +425,44 @@ hours on the Mac or in the 18 normal users' captures. How many bots it
 catches can't be measured on old captures, because the servers in them
 have long since left the list. It only knows servers someone has reported.
 
+### Spam bots: the mass-mail rule (off by default)
+
+Some bots send spam instead of checking in on a timer, which is why the
+check-in rule was late or missed them. Spam bots deliver mail straight to
+the recipients' mail servers on port 25; phones and computers send through
+one provider on port 587 or 465. So the rule raises a high-severity alert
+when a device on your network contacts 10 or more different internet mail
+servers on port 25 within 10 minutes.
+
+**Designed on:** CTU-13, 60 Stratosphere malware captures, 18 normal users'
+captures, three CIC-IDS2017 days and 48 hours on a real Mac. No normal
+machine reached more than one mail server; spam bots reached 35 to 45 a
+minute.
+
+| | Result |
+|---|---|
+| Spam bots caught | 17 of 19, most within about 6 minutes |
+| Alerts on normal machines | 0 |
+
+**Tested on data it hadn't seen,** with the rule frozen and the targets
+written down first, run once:
+
+| | Result | Target |
+|---|---|---|
+| Spam bots caught, 96 malware captures | 1 of 2 (after 20 minutes); the other contacted only 2 mail servers | at least 80%, median at most 10 min: **inconclusive**, fewer than 5 spam bots |
+| Alerts in 48 hours on a real Mac | 0 | 0 ✓ |
+| Alerts on CIC-IDS2017 Friday, Thursday and Monday | 0 | 0 ✓ |
+
+The 96 captures included every one whose name pointed to a spamming family
+(Emotet, Necurs, TrickBot), but only 2 were sending spam while captured.
+Set in advance: with fewer than 5 spam bots the catch rate can't be judged,
+and the rule stays off. It raised no false alarms anywhere, but the Mac
+sent no mail on port 25 during the 48 hours, so that shows it stays quiet
+on a typical home network, not on one running its own mail server. A spam
+bot added to the same capture was flagged within a minute, so the test
+itself could see one. Turn it on if you want it: `enabled = true` under
+`[mass_mail]` in `config/detection.toml`.
+
 ### Friday: tuned on the same day
 
 | Attack | Flows | Detected | Minutes caught |

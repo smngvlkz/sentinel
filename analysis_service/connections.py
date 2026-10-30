@@ -10,7 +10,8 @@ two views it lacks:
   TCP handshake completed, and whether it closed.
 - HostActivity counts new connections per host over sliding windows: how
   many a host opened, to how many different hosts, how many different
-  sources connected to it, and how often one source hit one service.
+  sources connected to it, how often one source hit one service, and how
+  many different internet mail servers a local host connected to.
 
 Host activity only changes when a connection starts, which is far rarer
 than packets, so the per-packet cost stays small.
@@ -45,6 +46,11 @@ CONN_CLOSED_TIMEOUT = 5.0
 # been open before capture started. After that it counts as new, so floods
 # that never send a SYN (ACK and RST floods) are still counted.
 STARTUP_WINDOW = 60.0
+# Mail servers accept mail from each other on TCP port 25. Home devices send
+# through their provider on 587 or 465; spam bots deliver straight to each
+# recipient's server on 25.
+MAIL_PORT = "25"
+MAIL_WINDOW = 600.0
 
 
 @dataclass(slots=True)
@@ -232,7 +238,7 @@ class WindowCounter:
 
 
 class _Host:
-    __slots__ = ("out_10s", "out_60s", "in_10s", "in_60s", "in_external_60s")
+    __slots__ = ("out_10s", "out_60s", "in_10s", "in_60s", "in_external_60s", "mail_10m")
 
     def __init__(self, cap: int) -> None:
         self.out_10s = WindowCounter(10, cap)  # connections this host opened; value = responder host
@@ -240,6 +246,13 @@ class _Host:
         self.in_10s = WindowCounter(10, cap)  # connections opened to this host; value = initiator host
         self.in_60s = WindowCounter(60, cap)
         self.in_external_60s = WindowCounter(60, cap)  # the same, from internet hosts only
+        # Internet mail servers this host connected to; made on first use, as few hosts ever do.
+        self.mail_10m: WindowCounter | None = None
+
+    def active(self, now: float) -> bool:
+        return bool(
+            self.out_60s.total(now) or self.in_60s.total(now) or (self.mail_10m and self.mail_10m.total(now))
+        )
 
 
 class HostActivity:
@@ -287,6 +300,16 @@ class HostActivity:
         if is_local(resp_ip) and not conn.before_capture:
             sweep = (init_ip, conn.protocol, conn.responder[1])
             self.sweeps.touch(sweep, lambda: WindowCounter(60, self.window_cap)).add(now, resp_ip)
+        if (
+            conn.protocol == "6"
+            and conn.responder[1] == MAIL_PORT
+            and is_local(init_ip)
+            and not is_local(resp_ip)
+            and not conn.before_capture
+        ):
+            if out.mail_10m is None:
+                out.mail_10m = WindowCounter(MAIL_WINDOW, self.window_cap)
+            out.mail_10m.add(now, resp_ip)
 
     def busiest(self, now: float) -> tuple[str | None, int, str | None]:
         """
@@ -320,11 +343,12 @@ class HostActivity:
             "responder_external_sources_60s": resp.in_external_60s.distinct(now) if resp else 0,
             "service_new_conns_10s": service.total(now) if service else 0,
             "initiator_same_port_local_hosts_60s": sweep.distinct(now) if sweep else 0,
+            "initiator_mail_servers_10m": init.mail_10m.distinct(now) if init and init.mail_10m else 0,
         }
 
     def cleanup(self, now: float) -> int:
         """Forget hosts and services with nothing in their windows."""
-        idle = self.hosts.expire(lambda h: not (h.out_60s.total(now) or h.in_60s.total(now)))
+        idle = self.hosts.expire(lambda h: not h.active(now))
         for table in (self.services, self.sweeps):
             table.expire(lambda c: not c.total(now))
         return idle

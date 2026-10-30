@@ -25,6 +25,7 @@ class RuleEngine:
             ("REQUEST_FLOOD", self._request_flood),
             ("DISTRIBUTED_FLOOD", self._distributed_flood),
             ("NETWORK_SWEEP", self._network_sweep),
+            ("MASS_MAIL", self._mass_mail),
             ("BEACONING", self._beaconing),
             ("KNOWN_BOTNET_SERVER", self._known_botnet_server),
         ]
@@ -90,6 +91,12 @@ class RuleEngine:
 
     def _network_sweep(self, f: dict[str, float]) -> bool:
         return f.get("initiator_same_port_local_hosts_60s", 0) > self.config["network_sweep"]["min_local_hosts_60s"]
+
+    def _mass_mail(self, f: dict[str, float]) -> bool:
+        # Delivering mail straight to many different internet mail servers
+        # (port 25) is what spam bots do; home devices send through one provider.
+        c = self.config["mass_mail"]
+        return bool(c.get("enabled", False)) and f.get("initiator_mail_servers_10m", 0) >= c["min_mail_servers_10m"]
 
     def _beaconing(self, f: dict[str, float]) -> bool:
         c = self.config["beaconing"]

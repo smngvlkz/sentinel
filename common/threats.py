@@ -27,6 +27,7 @@ THREATS: dict[str, Threat] = {
     "REQUEST_FLOOD": Threat("high", "Request flood", "{src} flooded {dst} with requests"),
     "DISTRIBUTED_FLOOD": Threat("high", "Distributed flood", "Many internet hosts converged on {dst}"),
     "NETWORK_SWEEP": Threat("medium", "Network sweep", "{src} probed many devices on your network"),
+    "MASS_MAIL": Threat("high", "Mass mailing", "{src} sent mail straight to many different mail servers"),
     "BEACONING": Threat("medium", "Regular check-ins", "{src} keeps checking in with {dst}"),
     "KNOWN_BOTNET_SERVER": Threat("high", "Known botnet server", "{src} connected to a known botnet server, {dst}"),
     "RESOURCE_PRESSURE": Threat(

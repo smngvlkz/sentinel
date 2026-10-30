@@ -6,6 +6,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Mass mailing (optional, off by default): a high-severity **Mass mailing**
+  alert when a device on your network delivers mail straight to 10 or more
+  different internet mail servers on port 25 within 10 minutes, the way
+  spam bots do. On the data it was designed on it caught 17 of 19 spam bots,
+  most within about 6 minutes, with no false alarms. On captures it hadn't
+  seen it raised no false alarms (48 hours on a real Mac, and three
+  CIC-IDS2017 days), but those held only 2 spam bots, too few to confirm how
+  many it catches, so it stays off. Turn it on with `enabled = true` under
+  `[mass_mail]` in `config/detection.toml`. Results in `docs/evaluation.md`.
+
 ## [0.6.4] - 2026-10-22
 
 ### Added
