@@ -171,6 +171,32 @@ services:
       - ntfy_cache:/var/cache/ntfy
     restart: unless-stopped
 
+  # Packet capture in Docker, for Linux. Started when COMPOSE_PROFILES
+  # includes capture (in .env). It shares the machine's network so it sees the
+  # real interface, which is why it only works on Linux: on macOS and Windows,
+  # Docker runs in a VM with a network of its own. There, run make capture.
+  capture:
+    profiles: ["capture"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.capture
+    network_mode: host
+    # Raw packets only: NET_RAW is enough to read them and to put the
+    # interface in promiscuous mode, so every other privilege is dropped.
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Redis's port on this machine (see redis above).
+      REDIS_HOST: 127.0.0.1
+      CAPTURE_INTERFACE: ${CAPTURE_INTERFACE:-eth0}
+      PAYLOAD_INSPECTION: ${PAYLOAD_INSPECTION:-}
+    restart: unless-stopped
+
   # Fake attack traffic for trying SentinelAI without packet capture.
   # Started only by `make demo` (docker compose --profile demo up).
   simulator:
