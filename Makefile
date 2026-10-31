@@ -4,6 +4,9 @@
 COMPOSE := docker compose -f docker/docker-compose.yml $(if $(wildcard .env),--env-file .env)
 PY := .venv/bin/python
 UI_URL := http://localhost:$(or $(DASHBOARD_UI_PORT),3001)
+# Set when capture runs in Docker (Linux), so `make capture` would capture twice.
+comma := ,
+DOCKER_CAPTURE := $(filter capture,$(subst $(comma), ,$(COMPOSE_PROFILES)))
 # Set when DASHBOARD_BIND lets other devices open the dashboard.
 EXPOSED := $(filter-out 127.0.0.1 localhost ::1,$(strip $(DASHBOARD_BIND)))
 
@@ -49,14 +52,19 @@ ifneq ($(EXPOSED),)
 	@echo "Other devices can open it too, at this machine's address, port $(or $(DASHBOARD_UI_PORT),3001)."
 	@echo "If you haven't set a password yet, it won't start until you run: make password"
 endif
+ifneq ($(DOCKER_CAPTURE),)
+	@echo "Packet capture is running in Docker on $(or $(CAPTURE_INTERFACE),eth0)."
+else
 	@echo "Next, start packet capture in another terminal: make capture"
+endif
 
 capture: ## Capture live packets from CAPTURE_INTERFACE (asks for sudo)
+	@test -z "$(DOCKER_CAPTURE)" || { echo "Capture already runs in Docker (COMPOSE_PROFILES includes capture)."; exit 1; }
 	@test -x $(PY) || { echo "Run 'make setup' first."; exit 1; }
 	sudo $(PY) capture_service/capture.py
 
 down: ## Stop all services
-	$(COMPOSE) --profile demo --profile ntfy down
+	$(COMPOSE) --profile demo --profile ntfy --profile capture down
 
 # A one-off container, so it works while the API is refusing to start for want
 # of a password; the restart then lets the API start without waiting.
@@ -68,13 +76,13 @@ restart: ## Restart the analyzer (after editing config or training a model)
 	$(COMPOSE) restart analyzer
 
 status: ## Show which services are running
-	$(COMPOSE) --profile demo --profile ntfy ps
+	$(COMPOSE) --profile demo --profile ntfy --profile capture ps
 
 logs: ## Follow logs from all services
-	$(COMPOSE) --profile demo --profile ntfy logs -f
+	$(COMPOSE) --profile demo --profile ntfy --profile capture logs -f
 
 build: ## Rebuild all images
-	$(COMPOSE) --profile demo --profile ntfy build
+	$(COMPOSE) --profile demo --profile ntfy --profile capture build
 
 # ── Notifications ───────────────────────────────────────────────────────
 
@@ -87,6 +95,9 @@ notify-setup: .env ## Set up phone notifications with your own ntfy server
 	@grep -q '^NTFY_TOPIC=.' .env || echo "NTFY_TOPIC=sentinel-$$(python3 -c 'import secrets; print(secrets.token_hex(8))')" >> .env
 	@grep -q '^NTFY_TOKEN=.' .env || echo "NTFY_TOKEN=tk_$$(python3 -c 'import secrets, string; a = string.ascii_lowercase + string.digits; print("".join(secrets.choice(a) for _ in range(29)))')" >> .env
 	@grep -q '^COMPOSE_PROFILES=' .env || echo "COMPOSE_PROFILES=ntfy" >> .env
+	@# Already set (to capture, say): add ntfy to the list.
+	@awk '/^COMPOSE_PROFILES=/ && !/[=,]ntfy(,|$$)/ { $$0 = $$0 (/=$$/ ? "" : ",") "ntfy" } 1' .env > .env.tmp \
+		&& cat .env.tmp > .env && rm .env.tmp
 	@grep -q '^NTFY_BASE_URL=' .env || echo "NTFY_BASE_URL=" >> .env
 	@echo "Added NTFY_TOPIC, NTFY_TOKEN and COMPOSE_PROFILES=ntfy to .env (if they weren't there)."
 	@echo "Next (README \"Notifications\" has the details):"
@@ -134,4 +145,4 @@ install-launchd: ## macOS: run capture at boot as a LaunchDaemon (asks for sudo)
 	@echo "Capture now starts at boot. Logs: logs/capture.log"
 
 clean: ## Stop everything and delete all stored alerts and images
-	$(COMPOSE) --profile demo --profile ntfy down -v --rmi local
+	$(COMPOSE) --profile demo --profile ntfy --profile capture down -v --rmi local

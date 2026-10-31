@@ -56,8 +56,9 @@ everything with `make down`.
 
 ## Watch your real network
 
-Packet capture reads raw network traffic, so it runs on your machine (not in
-Docker) and needs `sudo`. You'll also need Python 3.12 or newer.
+Packet capture reads raw network traffic. On macOS it runs on your machine
+(not in Docker) and needs `sudo` and Python 3.12 or newer. On Linux it can
+also run in Docker instead (see [below](#linux-capture-in-docker)).
 
 ```bash
 make setup     # creates .env and a Python virtual environment
@@ -81,6 +82,26 @@ If you ran the demo first, the demo alerts stay in the history. Run
 `make clean` first if you want a fresh start.
 
 On macOS, `make install-launchd` sets up capture to start automatically at boot.
+
+### Linux: capture in Docker
+
+On Linux, capture can run as a container alongside the other services, so
+there's no Python to install, no `sudo`, and it restarts on its own if it
+stops. In `.env`, set `CAPTURE_INTERFACE` (see the table above) and add the
+`capture` profile:
+
+```bash
+CAPTURE_INTERFACE=eth0
+COMPOSE_PROFILES=capture     # with ntfy too: COMPOSE_PROFILES=capture,ntfy
+```
+
+Then `make up` starts capture with everything else; there's no
+`make capture` step. The container shares the machine's network so it can
+see the real interface, and gets one privilege, reading raw packets
+(`NET_RAW`); everything else is dropped and its filesystem is read-only.
+This only works on Linux: Docker on macOS and Windows runs in a virtual
+machine with a network of its own, so capture there would only see that
+machine's traffic.
 
 ## Commands
 
@@ -343,7 +364,7 @@ Settings live in `.env`, which `make setup` creates from [`.env.example`](.env.e
 | `NAMES_ENABLED` | from `detection.toml` | Overrides `[names] enabled` (`make demo` sets it to `true`; its traffic is made up) |
 | `SENTINEL_CONFIG` | `config/detection.toml` | Path to a custom detection config |
 | `THREATFOX_AUTH_KEY` | | Free abuse.ch Auth-Key for downloading the known botnet server list ([get one](https://auth.abuse.ch/)). Setting it turns that rule on. |
-| `COMPOSE_PROFILES` | | `ntfy` starts your own ntfy server with `make up` ([Notifications](#notifications)) |
+| `COMPOSE_PROFILES` | | Extra services for `make up`, separated by commas: `ntfy` starts your own ntfy server ([Notifications](#notifications)); `capture` runs packet capture in Docker, Linux only ([Linux: capture in Docker](#linux-capture-in-docker)) |
 | `NTFY_TOPIC`, `NTFY_TOKEN` | | Your ntfy topic, and the token the notifier posts with. `make notify-setup` creates both |
 | `NTFY_BASE_URL`, `NTFY_PORT` | , `8090` | Your ntfy server's address as your phone reaches it, and its port |
 | `SMTP_PASSWORD` | | Password for `[email]` in `config/notifications.toml` |
@@ -454,7 +475,7 @@ own Wi-Fi, or from anywhere [with Tailscale](#from-anywhere-with-tailscale).
 
 1. Install the ntfy app on your phone (App Store or Google Play).
 2. Run `make notify-setup`. It adds a random topic name (`NTFY_TOPIC`), the
-   notifier's token (`NTFY_TOKEN`) and `COMPOSE_PROFILES=ntfy` to `.env`.
+   notifier's token (`NTFY_TOKEN`) and the `ntfy` profile (`COMPOSE_PROFILES`) to `.env`.
 3. In `.env`, set `NTFY_BASE_URL` to this machine's address as your phone
    reaches it, port 8090, e.g. `http://100.101.102.103:8090` with Tailscale.
    Your phone has to reach the server, so it also needs

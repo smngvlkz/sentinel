@@ -8,6 +8,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Packet capture in Docker on Linux: add `capture` to `COMPOSE_PROFILES` in
+  `.env` and `make up` starts it with the other services, with no Python or
+  `sudo` needed, restarting on its own if it stops. It gets only the
+  privilege to read raw packets, and a read-only filesystem. macOS keeps
+  `make capture`, since Docker there can't see the real network.
 - AI triage (optional, off by default): a local model, through Ollama, gives
   its opinion on each group of alerts once the group has been quiet for 10
   minutes: likely harmless, worth checking or likely an attack, with a
