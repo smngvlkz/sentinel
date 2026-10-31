@@ -38,6 +38,11 @@ THREATS: dict[str, Threat] = {
 # How urgent each threat type is. Unknown types count as low.
 SEVERITY: dict[str, str] = {t: info.severity for t, info in THREATS.items()}
 SEVERITIES = ("high", "medium", "low")
+# How repeat alerts are grouped: one distributed-flood alert per victim, not
+# one per attacking host; one sweep alert per scanner, not one per target;
+# one mass-mail or check-in alert per device, not one per server it contacts.
+# The side that changes becomes "*" in the repeat key (AlertManager._key).
+ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "MASS_MAIL": "source", "BEACONING": "source"}
 _RANK = {s: i for i, s in enumerate(reversed(SEVERITIES))}  # low 0, medium 1, high 2
 
 

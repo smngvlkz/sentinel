@@ -118,6 +118,28 @@ services:
       - ../config:/app/config:ro
     restart: unless-stopped
 
+  # AI triage: a local model's opinion on each group of alerts
+  # (config/triage.toml). Does nothing until it's turned on there.
+  triage:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.triage
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *db-env
+      REDIS_HOST: redis
+    # host.docker.internal: the machine Docker runs on, where Ollama usually
+    # is. Docker Desktop provides it; this line adds it on Linux too.
+    extra_hosts:
+      host.docker.internal: host-gateway
+    volumes:
+      - ../config:/app/config:ro
+    restart: unless-stopped
+
   # Your own ntfy server, for phone notifications that stay on this machine.
   # Started when COMPOSE_PROFILES=ntfy is in .env (make notify-setup adds it).
   # Its port is open to the same devices as the dashboard (DASHBOARD_BIND),

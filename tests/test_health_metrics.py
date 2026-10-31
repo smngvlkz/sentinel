@@ -133,6 +133,17 @@ class TestHealth:
         capture = self.health(r)["services"]["capture"]
         assert capture["kernel_dropped_total"] == 0 and capture["names_dropped_total"] is None
 
+    def test_triage_status(self):
+        r = FakeRedis([])
+        assert self.health(r)["services"]["triage"] == {"running": False}
+        r.set("sentinel:triage:heartbeat", json.dumps({
+            "at": time.time(), "enabled": True, "error": "Ollama at http://ollama: connection refused",
+            "model": "qwen3.5", "digest": "6488c96fa5fa", "collecting": 2, "waiting": 1, "last_triaged_at": None}))
+        triage = self.health(r)["services"]["triage"]
+        assert triage["running"] and triage["waiting"] == 1 and "refused" in triage["error"]
+        r.set("sentinel:triage:heartbeat", json.dumps({"at": time.time() - 600, "enabled": True}))
+        assert self.health(r)["services"]["triage"] == {"running": False}  # stopped reporting
+
     def test_known_server_list_status(self):
         r = FakeRedis([])
         status = {"entries": 3390, "updated_at": 1000.0, "error": None}

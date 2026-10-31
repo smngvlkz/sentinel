@@ -8,6 +8,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- AI triage (optional, off by default): a local model, through Ollama, gives
+  its opinion on each group of alerts once the group has been quiet for 10
+  minutes: likely harmless, worth checking or likely an attack, with a
+  sentence on why, shown in the alert's details. It's advice only: it can't
+  hide, change or review an alert, or decide whether a notification is sent,
+  and scans and floods are never called likely harmless. It runs as its own
+  service (`triage`), so a slow or missing model never holds up detection.
+  Turn it on in the new `config/triage.toml`; see the README's AI triage
+  section. Results in `docs/evaluation.md`.
 - Mass mailing (optional, off by default): a high-severity **Mass mailing**
   alert when a device on your network delivers mail straight to 10 or more
   different internet mail servers on port 25 within 10 minutes, the way

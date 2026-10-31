@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 
+from common.threats import ALERT_GROUP
+
 from .config import has_rate_evidence, load_config
 from .rules import RuleEngine
 from .anomaly_model import AnomalyDetector
@@ -20,12 +22,6 @@ log = logging.getLogger(__name__)
 # name the connection's initiator as the source, whichever direction the
 # triggering packet went.
 CONNECTION_RULES = {"REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "NETWORK_SWEEP", "MASS_MAIL", "BEACONING", "KNOWN_BOTNET_SERVER"}
-
-# How repeat alerts are grouped: one distributed-flood alert per victim, not
-# one per attacking host; one sweep alert per scanner, not one per target;
-# one mass-mail or check-in alert per device, not one per server it contacts.
-ALERT_GROUP = {"DISTRIBUTED_FLOOD": "destination", "NETWORK_SWEEP": "source", "MASS_MAIL": "source", "BEACONING": "source"}
-
 
 class DetectionEngine:
 

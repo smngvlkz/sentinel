@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Pencil } from "lucide-react";
-import type { Alert } from "@/lib/api";
+import type { Alert, TriageStatus, TriageVerdict } from "@/lib/api";
 import { crowdLabel, DEFAULT_FEATURES, FEATURE_LABELS, threatInfo } from "@/lib/threats";
 import { formatDateTime, ipOrigin, timeAgo } from "@/lib/format";
 import { Address, Label, OriginTag, SeverityIndicator, ThreatIcon } from "./ui";
@@ -123,6 +123,58 @@ function DeviceNamer({
         </p>
       )}
     </form>
+  );
+}
+
+const VERDICT_STYLE: Record<TriageVerdict, string> = {
+  "likely an attack": "text-high",
+  "worth checking": "text-medium",
+  "likely harmless": "text-ok",
+};
+
+const TRIAGE_PENDING: Record<Exclude<TriageStatus, "triaged">, string> = {
+  open: "Waiting until this group of alerts has been quiet for 10 minutes, then the model is asked.",
+  waiting: "Not triaged yet: waiting for the model.",
+  "not triaged": "Not triaged: the model's answer didn't fit the expected format.",
+  skipped: "Not triaged.",
+};
+
+// Rules triage never shows as "likely harmless" (NEVER_HARMLESS in
+// triage_service/triage.py). When the model calls one harmless, the verdict is
+// raised to "worth checking" but the reason stays the model's, so say why
+// (only on that verdict: under "likely an attack" it adds nothing).
+const NEVER_HARMLESS = new Set([
+  "SYN_FLOOD", "REQUEST_FLOOD", "DISTRIBUTED_FLOOD", "PORT_SCAN", "NETWORK_SWEEP", "MASS_MAIL", "KNOWN_BOTNET_SERVER",
+]);
+
+/**
+ * AI triage's opinion on the group this alert belongs to. Advice only: the
+ * reason is the model's own text, shown as plain text and never as markup.
+ */
+function TriageOpinion({ alert }: { alert: Alert }) {
+  const status = alert.triage_status;
+  if (!status) return null;
+  return (
+    <section className="px-6 pt-6">
+      <Label as="h3">AI triage</Label>
+      {status === "triaged" && alert.triage_verdict ? (
+        <div className="mt-2 max-w-[60ch]">
+          <p className={`font-medium capitalize ${VERDICT_STYLE[alert.triage_verdict]}`}>{alert.triage_verdict}</p>
+          {alert.triage_reason && <p className="mt-1 text-fg-2">{alert.triage_reason}</p>}
+          {alert.triage_verdict === "worth checking" && NEVER_HARMLESS.has(alert.threat_type) && (
+            <p className="mt-2 text-fg-2">
+              Alerts of this kind are never shown as likely harmless, whatever the model says.
+            </p>
+          )}
+          <p className="mt-2 text-xs text-fg-3">
+            A local model&apos;s opinion on this group of alerts. It can be wrong, and it never changes or hides an
+            alert.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-2 max-w-[60ch] text-fg-2">{TRIAGE_PENDING[status as Exclude<TriageStatus, "triaged">]}</p>
+      )}
+    </section>
   );
 }
 
@@ -317,6 +369,8 @@ export default function AlertDrawer({ alert, onClose, onReviewChange, onNameDevi
                 : "Detection rule"}
           </dd>
         </dl>
+
+        <TriageOpinion alert={alert} />
 
         <section className="px-6 pt-6">
           <Label as="h3">What this means</Label>

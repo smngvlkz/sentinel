@@ -125,6 +125,7 @@ Detection engine ── rules + optional Isolation Forest model
 Alert manager ── de-duplicates repeats, stores to PostgreSQL
        │
        ├── Notifier ── phone (ntfy), email, chat
+       ├── AI triage ── a local model's opinion on each group (optional)
        │
 FastAPI ──── Next.js dashboard
 ```
@@ -136,6 +137,7 @@ FastAPI ──── Next.js dashboard
 | `detection_engine/` | Checks each flow against the rules in `config/detection.toml` and, if trained, the anomaly model. |
 | `alert_service/` | Logs and stores alerts. Repeats of the same threat for the same pair are suppressed for a cooldown window, so a flood produces one alert instead of thousands. |
 | `notifier/` | Sends new alerts to a phone, email or chat, with quiet hours, an hourly limit and retries. Runs on its own, so a slow channel can't hold up detection. |
+| `triage_service/` | Optional AI triage: asks a local model (through Ollama) for an opinion on each group of alerts. Runs on its own, after alerts are stored. |
 | `dashboard-api/` | REST API for the dashboard. |
 | `dashboard/` | Next.js dashboard. |
 | `common/` | Small pieces shared between services: what counts as a hostname, how on/off settings are read, and the database migration runner. |
@@ -499,6 +501,54 @@ Put the webhook URL in `.env` as `WEBHOOK_URL`, and under `[webhook]` set
 servers, including your devices' addresses and names. Set `ips_only = true`
 to send addresses only, without device names or hostnames.
 
+## AI triage (optional)
+
+A local model can give its opinion on each group of alerts, shown in the
+alert's details on the dashboard: **likely harmless**, **worth checking** or
+**likely an attack**, with a sentence on why. It's off until you turn it on
+in [`config/triage.toml`](config/triage.toml).
+
+**It's advice only.** It can't hide, change or review an alert, or decide
+whether a notification is sent. Turning it off leaves SentinelAI exactly as
+it was. It can be wrong, including about a real attack; how often it was
+wrong in testing is in [docs/evaluation.md](docs/evaluation.md). Scans and
+floods are never called "likely harmless", whatever the model says.
+
+**How it works**
+
+- Alerts are grouped the way the dashboard repeats them: the same kind of
+  alert between the same devices (or from one device to many, for sweeps,
+  check-ins and mass mailing), joined while each comes within 10 minutes of
+  the last.
+- A group is triaged once it has been quiet for 10 minutes, so the model sees
+  the whole of it. Most groups get an opinion about a quarter of an hour
+  after they start. A group that keeps going waits until it stops.
+- Low-severity groups are skipped. Turning triage on doesn't triage alerts
+  already recorded.
+- The model sees the alerts' numbers, and learned hostnames if names are on,
+  as data, never as instructions; anything it answers outside the expected
+  format counts as not triaged. Its reason is shown as plain text.
+
+**Setting it up**
+
+1. Install [Ollama](https://ollama.com) on this machine, or on another
+   computer in your home, and pull the model: `ollama pull qwen3.5`.
+2. In `config/triage.toml`, set `enabled = true`. If Ollama is on another
+   machine, set `url` to its address, e.g. `http://192.168.1.50:11434`.
+3. Run `make up`.
+
+Triage checks the model's exact build (`digest`) and refuses to run on any
+other, because a different build can answer differently from the one that
+was tested. If Ollama is off, asleep or unreachable, groups show "not
+triaged yet" and are triaged once it's back; groups that wait more than a day
+are skipped. `GET /health` says whether triage is running and why it's
+waiting.
+
+**Privacy.** Alerts, and hostnames if names are on, go to the Ollama machine
+over your home network, unencrypted, and nowhere else. Ollama has no
+password: on another machine, let only the SentinelAI machine reach its port
+(11434), with that machine's firewall, or by using its Tailscale address.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -519,9 +569,9 @@ The API runs at http://localhost:8000, with interactive docs at `/docs`.
 |----------|---------|
 | `GET /auth/status` | Whether a password is set and this browser is logged in. Once a password is set, this, `POST /auth/login` and `POST /auth/setup` are the only endpoints that work without logging in |
 | `POST /auth/login`, `/auth/logout`, `/auth/setup`, `/auth/password` | Log in or out, set the first password (from this machine only), change it (`{"current": ..., "new": ...}`) |
-| `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), packets the kernel dropped before capture could read them (`kernel_dropped_total`, since capture started), and hostnames capture rejected (`names_dropped_total`, when names are on) |
+| `GET /health` | Status of the database (with its size on disk, roughly how many alerts it holds, and the oldest one), Redis, capture and analyzer, plus the analyzer's backlog (`lag`, `pending`), packets dropped from the stream before it read them (`packets_lost_unread`), each memory table's size, limit and entries dropped in the last minute (`tables`), packets the kernel dropped before capture could read them (`kernel_dropped_total`, since capture started), hostnames capture rejected (`names_dropped_total`, when names are on), and whether AI triage is running and on, how many groups are waiting, and any problem reaching the model (`triage`) |
 | `GET /stats?hours=24` | Alert count, distinct sources, counts by severity, and the most severe unreviewed alert |
-| `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type` |
+| `GET /alerts?hours=24&limit=50` | Recent alerts, filterable by `severity`, `status` (`all`, `unreviewed`, `reviewed`) and `threat_type`. Each carries AI triage's opinion on its group, if any: `triage_status` (`open`, `waiting`, `triaged`, `not triaged` or `skipped`), `triage_verdict` and `triage_reason` |
 | `POST /alerts/review` | Mark alerts reviewed or unreviewed: `{"ids": [1, 2]}` or `{"hours": 24, "severity": "high"}`, plus `"reviewed": false` to undo |
 | `GET /alerts/{id}` | One alert (notifications link to it) |
 | `GET /alerts/summary?hours=24` | Alert counts by type |

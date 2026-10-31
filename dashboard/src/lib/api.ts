@@ -22,7 +22,15 @@ export interface Alert {
   detection_source: string;
   features: Record<string, number>;
   reviewed_at: string | null;
+  /** AI triage's opinion on this alert's group; null when triage is off or hasn't seen it. */
+  triage_status: TriageStatus | null;
+  triage_verdict: TriageVerdict | null;
+  /** Written by the model: always shown as plain text. */
+  triage_reason: string | null;
 }
+
+export type TriageStatus = "open" | "waiting" | "triaged" | "not triaged" | "skipped";
+export type TriageVerdict = "likely harmless" | "worth checking" | "likely an attack";
 
 export interface AlertSummary {
   threat_type: string;
@@ -63,6 +71,17 @@ export interface Health {
       running: boolean;
       model_loaded?: boolean;
       packets_processed?: number;
+    };
+    /** AI triage's heartbeat; absent from APIs older than triage. */
+    triage?: {
+      running: boolean;
+      enabled?: boolean;
+      error?: string | null;
+      model?: string;
+      digest?: string;
+      collecting?: number;
+      waiting?: number;
+      last_triaged_at?: number | null;
     };
   };
 }

@@ -48,6 +48,8 @@ CAPTURE_LIVE_SECONDS = 15
 # The notifier reports every couple of seconds; older than this, it's stopped.
 NOTIFIER_HEARTBEAT_KEY = "sentinel:notifier:heartbeat"
 NOTIFIER_LIVE_SECONDS = 30
+TRIAGE_HEARTBEAT_KEY = "sentinel:triage:heartbeat"
+TRIAGE_LIVE_SECONDS = 60
 
 Severity = Literal["high", "medium", "low"]
 ReviewStatus = Literal["all", "unreviewed", "reviewed"]
@@ -186,12 +188,24 @@ def severity_sql() -> tuple[str, list[Any]]:
 
 
 def alert_select(sev_expr: str) -> str:
-    """SELECT … FROM for alert rows, with each end's friendly device name if one is set."""
+    """
+    SELECT … FROM for alert rows, with each end's friendly device name if one
+    is set, and AI triage's opinion on the alert's group if there is one.
+    """
     return f"""SELECT alerts.*, sd.name AS source_device, dd.name AS destination_device,
-                      {sev_expr} AS severity
+                      {sev_expr} AS severity,
+                      tr.status AS triage_status, tr.verdict AS triage_verdict, tr.reason AS triage_reason
                FROM alerts
                LEFT JOIN device_names sd ON sd.ip = alerts.source_ip
-               LEFT JOIN device_names dd ON dd.ip = alerts.destination_ip"""
+               LEFT JOIN device_names dd ON dd.ip = alerts.destination_ip
+               LEFT JOIN LATERAL (
+                   SELECT status, verdict, reason FROM triage
+                   WHERE triage.threat_type = alerts.threat_type
+                     AND triage.source_ip IN (alerts.source_ip, '*')
+                     AND triage.destination_ip IN (alerts.destination_ip, '*')
+                     AND alerts.id BETWEEN triage.first_alert_id AND triage.last_alert_id
+                   ORDER BY triage.first_alert_id DESC LIMIT 1
+               ) tr ON TRUE"""
 
 
 def alert_filter(
@@ -438,6 +452,7 @@ def auth_change_password(body: ChangePasswordRequest, response: Response) -> dic
 @app.get("/health")
 def health() -> dict[str, Any]:
     services = {"database": _check_database(), **_check_redis_and_pipeline()}
+    services["triage"] = _triage_state() if services["redis"]["ok"] else {"running": False}
     healthy = services["database"]["ok"] and services["redis"]["ok"]
     return {"status": "ok" if healthy else "degraded", "version": VERSION, "services": services}
 
@@ -635,6 +650,19 @@ def _notifier_state(r: redis.Redis) -> dict[str, Any] | None:
         return None
     state = json.loads(beat)
     return state if time.time() - float(state.get("at", 0)) < NOTIFIER_LIVE_SECONDS else None
+
+
+def _triage_state() -> dict[str, Any]:
+    """AI triage: whether it's running and on, what's waiting, and any problem (the model unreachable, say)."""
+    try:
+        beat = get_redis().get(TRIAGE_HEARTBEAT_KEY)
+    except redis.exceptions.RedisError:
+        beat = None
+    state = json.loads(beat) if beat else None
+    if state is None or time.time() - float(state.get("at", 0)) >= TRIAGE_LIVE_SECONDS:
+        return {"running": False}
+    return {"running": True, **{k: state.get(k) for k in (
+        "enabled", "error", "model", "digest", "collecting", "waiting", "last_triaged_at")}}
 
 
 @app.get("/notifications")

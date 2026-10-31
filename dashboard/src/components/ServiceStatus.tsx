@@ -18,7 +18,7 @@ function items(health: Health | null): Item[] {
   if (!health) {
     return [{ label: "API", tone: "down", detail: "Not reachable" }];
   }
-  const { capture, analyzer, database, redis } = health.services;
+  const { capture, analyzer, database, redis, triage } = health.services;
 
   const traffic: Item =
     capture.state === "live"
@@ -42,7 +42,19 @@ function items(health: Health | null): Item[] {
       : { label: "Analyzer", tone: "down", detail: "Not running" },
     { label: "Database", tone: database.ok ? "ok" : "down", detail: database.ok ? "Connected" : "Not reachable" },
     { label: "Redis", tone: redis.ok ? "ok" : "down", detail: redis.ok ? "Connected" : "Not reachable" },
+    // Only shown while triage is on, so with it off the bar is as it was.
+    ...(triage?.running && triage.enabled ? [triageItem(triage)] : []),
   ];
+}
+
+function triageItem(triage: NonNullable<Health["services"]["triage"]>): Item {
+  if (triage.error) return { label: "AI triage", tone: "warn", detail: `Paused: ${triage.error}` };
+  const waiting = triage.waiting ?? 0;
+  return {
+    label: "AI triage",
+    tone: "ok",
+    detail: waiting > 0 ? `${waiting} ${waiting === 1 ? "group" : "groups"} waiting for the model` : `Ready (${triage.model})`,
+  };
 }
 
 export default function ServiceStatus({ health }: { health: Health | null }) {
