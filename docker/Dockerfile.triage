@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY common/ ./common/
+COPY database/migrations/ ./database/migrations/
+# triage.py reads which addresses are on your network from these.
+COPY analysis_service/ ./analysis_service/
+COPY detection_engine/ ./detection_engine/
+COPY triage_service/ ./triage_service/
+# config/ is mounted from the host by docker-compose, so edits to
+# triage.toml apply without a rebuild.
+
+CMD ["python", "-m", "triage_service"]

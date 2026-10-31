@@ -1,0 +1,26 @@
+# AI triage: a local model's opinion on each group of alerts, shown next to
+# it on the dashboard. Off by default. It's advice only: it can't hide,
+# change or review an alert, or decide whether a notification is sent.
+#
+# It needs Ollama (https://ollama.com) on this machine or another one in
+# your home, with the model below pulled (ollama pull qwen3.5). Alerts and
+# the hostnames learned for them are sent to that machine, unencrypted, and
+# go nowhere else. Edits apply within a few seconds, no restart needed.
+
+[triage]
+enabled = false
+
+# Where Ollama is. host.docker.internal is the machine Docker runs on; for
+# another machine use its address, e.g. http://192.168.1.50:11434. Ollama has
+# no password, so on another machine let only this one reach its port.
+url = "http://host.docker.internal:11434"
+
+# The model, and the exact build of it (the start of its digest, from
+# `ollama list`). Triage refuses to run on any other build: a different one
+# can give different answers, and this is the one that was tested
+# (docs/evaluation.md).
+model = "qwen3.5"
+digest = "6488c96fa5fa"
+
+# How long to wait for one answer. A group with hostnames is asked twice.
+timeout_seconds = 120
